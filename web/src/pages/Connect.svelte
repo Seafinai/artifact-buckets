@@ -61,6 +61,7 @@
       </div>
       <Copy text={os === 'windows' ? setup.windows : setup.unix} label="the setup command" />
       <p class="note">In {os === 'windows' ? 'PowerShell' : 'a terminal'}. It asks nothing there, and running it again is safe.</p>
+      {#if setup.fingerprint}<p class="note fp">Both carry this server’s certificate fingerprint and check it before trusting anything. <span class="mono">SHA-256 {setup.fingerprint.match(/.{1,4}/g).join(' ')}</span></p>{/if}
     </div>
     <div class="card step">
       <span class="num mono">2</span>
@@ -251,6 +252,7 @@
   .rm { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
   .rm p { margin: 0; }
   .rm .mono { overflow-wrap: anywhere; font-size: 12px; }
+  .fp .mono { display: block; margin-top: 4px; font-size: 11px; color: var(--faint); overflow-wrap: anywhere; letter-spacing: .02em; }
   .mrow { display: grid; grid-template-columns: 14px 1fr auto; gap: 9px; align-items: center; font-size: 12px; }
   .mrow.off .mono:not(.faint) { color: var(--faint); text-decoration: line-through; }
   .mbox { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--line-hover); display: grid; place-items: center; }

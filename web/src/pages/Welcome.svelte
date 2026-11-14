@@ -137,7 +137,7 @@
           <h1>Connect Claude Code</h1>
           <p class="lede">Paste this into Claude Code on your computer. It sets everything up, then opens one page here where you choose which of Claude’s existing files to bring in and press <b>Connect</b>. That’s the only click.</p>
           <Copy text={setup.prompt} label="the prompt" />
-          <p class="note">Rather not use Claude for it? The same steps are one line for {os === 'windows' ? 'PowerShell' : 'a terminal'}, below.{#if setup.private_ca}{' '}This server has its own certificate, so your browser may warn the first time.{/if}</p>
+          <p class="note">Rather not use Claude for it? The same steps are one line for {os === 'windows' ? 'PowerShell' : 'a terminal'}, below.{#if setup.private_ca}{' '}This server has its own certificate, so your browser may warn the first time; the setup line checks that certificate before trusting the server.{/if}</p>
           <div class="segs os" role="group" aria-label="Your computer">
             <button class="seg" class:on={os === 'windows'} onclick={() => (os = 'windows')}>Windows</button>
             <button class="seg" class:on={os === 'unix'} onclick={() => (os = 'unix')}>macOS and Linux</button>

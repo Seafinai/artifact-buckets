@@ -55,8 +55,9 @@ It asks for the address people will use and an admin email, installs Docker if i
 with HTTPS:
 
 - **A public name** (it resolves to a public IP, ports 80 and 443 free): a Let's Encrypt certificate.
-- **A LAN name or an IP address:** a self-signed certificate for that address only. The Claude Code setup line
-  offers to trust it on each computer.
+- **A LAN name or an IP address:** a self-signed certificate for that address only (not a CA, so it can vouch for
+  nothing else). The Claude Code setup line carries the certificate's fingerprint and checks it before it trusts
+  the server, so setup is encrypted from start to finish with no certificate to buy.
 - **ZFS present:** it offers to keep files on their own dataset with automatic restore points.
 
 At the end it prints the address, the admin password and the one line that connects Claude Code.
@@ -160,6 +161,13 @@ cd server && ../.venv/bin/python -m pytest -q && cd ../qa && ../.venv/bin/python
   - Admin powers never work through a personal token.
 - **Browser sessions.** HttpOnly, Secure, SameSite=Lax cookies plus a CSRF header on every change.
 - **Previews.** Shown from short-lived signed links that only work in the signed-in browser session they were made for, with a sandbox CSP, so an HTML file can't act as the app. Downloads are always attachments.
+- **Claude Code setup with a self-signed certificate.** The setup line fetches a small connect script from this
+  repository on GitHub over HTTPS and passes it the server's address and its certificate's SHA-256 fingerprint
+  (shown on the Connect page and at the end of the install). The script compares the certificate the server
+  presents with that fingerprint before it sends or trusts anything, then fetches the server's own setup script
+  over a connection pinned to that certificate. The server refuses to hand out setup scripts over plain http, and
+  plain http only redirects to https. Computers that can't reach GitHub can use a copy of `connect/` hosted
+  anywhere they trust over HTTPS (`AB_CONNECT_URL`).
 - **Claude Code sign-in.** Redirects go only to Claude Code's loopback listener, unless an admin lists another https host in `AB_OAUTH_REDIRECT_HOSTS`; the consent page names any other destination.
 - **Secret key.** With secure cookies on (as in compose), the app refuses to start without an `AB_SECRET_KEY` of at least 16 characters. In development with no key set, it makes a fresh random key each run, so sign-ins end on restart.
 - **Paths.** One normalizer refuses `..`, hidden names, Windows-invalid names and symlink escapes, and every operation checks the same grants.

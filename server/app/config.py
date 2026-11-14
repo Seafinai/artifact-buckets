@@ -73,11 +73,16 @@ class Settings:
     plugin_marketplace: str = field(default_factory=lambda: os.environ.get("AB_PLUGIN_MARKETPLACE", ""))
     # The plugin's files, served as a zip with this server's address written into its .mcp.json.
     plugin_dir: str = field(default_factory=lambda: os.environ.get("AB_PLUGIN_DIR", "../plugin-marketplace/artifact-buckets"))
-    # Where the one-line installers are fetched from, when that differs from base_url (a server with
-    # a self-signed certificate serves them over plain http so a computer can fetch them before it trusts it).
+    # Where the one-line installers are fetched from, when that differs from base_url. Not used with a
+    # self-signed certificate: then the setup line comes from connect_url and pins the certificate.
     install_url: str = field(default_factory=lambda: os.environ.get("AB_INSTALL_URL", ""))
     # A private root certificate the installers should trust (self-signed installs only; empty with a public certificate).
     install_ca_file: str = field(default_factory=lambda: os.environ.get("AB_INSTALL_CA_FILE", ""))
+    # Where the connect scripts live (connect.sh, connect.ps1, README.md), served over HTTPS with a public
+    # certificate. With a self-signed server certificate, the setup line fetches them from here and passes
+    # this server's address and certificate fingerprint, so no part of setup travels over plain http.
+    connect_url: str = field(default_factory=lambda: os.environ.get(
+        "AB_CONNECT_URL", "https://raw.githubusercontent.com/Seafinai/artifact-buckets/main/connect").rstrip("/"))
     # Sign-in redirects Claude Code may use. Claude Code always uses a loopback address; other https hosts
     # (for example a web-based client) must be listed here, comma-separated, or registration is refused.
     oauth_redirect_hosts: tuple[str, ...] = field(default_factory=lambda: tuple(

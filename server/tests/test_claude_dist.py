@@ -54,25 +54,71 @@ def test_installers_and_policy(env, monkeypatch):
         s = c.get(path).text
         assert "{{" not in s and "http://testserver/claude/marketplace.json" in s
         assert "plugin:artifact-buckets:artifact-buckets" in s
-        assert "CaUrl = ''" in s or "CA_URL=''" in s
+        assert "CaSha = ''" in s or "CA_SHA=''" in s
     assert c.get("/claude/ca.crt").status_code == 404
     # Not swallowed by the web app's page fallback.
     assert c.get("/claude/nope").status_code == 404
 
 
-def test_private_ca_is_pinned_in_installers(env, monkeypatch, tmp_path):
+def _private_ca(env, monkeypatch, tmp_path, **extra):
     import base64
     der = b"\x30\x03\x02\x01\x01"  # any bytes: only the fingerprint matters here
     pem = b"-----BEGIN CERTIFICATE-----\n" + base64.b64encode(der) + b"\n-----END CERTIFICATE-----\n"
-    f = tmp_path / "root.crt"
+    f = tmp_path / "server.crt"
     f.write_bytes(pem)
-    c = _client(env, monkeypatch, AB_INSTALL_CA_FILE=str(f), AB_INSTALL_URL="http://boot.example:8090")
-    assert c.get("/claude/ca.crt").content == pem
-    sha = hashlib.sha256(der).hexdigest().upper()
-    assert f"$CaSha = '{sha}'" in c.get("/claude/install.ps1").text
-    sh = c.get("/claude/install.sh").text
-    assert f"CA_SHA='{sha}'" in sh and "CA_URL='http://boot.example:8090/claude/ca.crt'" in sh
-    assert c.get("/api/auth/me").json()["claude"]["private_ca"] is True
+    c = _client(env, monkeypatch, AB_INSTALL_CA_FILE=str(f), AB_BASE_URL="https://files.example.lan:8443", **extra)
+    return c, pem, hashlib.sha256(der).hexdigest().upper()
+
+
+def test_private_ca_is_pinned_in_installers(env, monkeypatch, tmp_path):
+    c, pem, sha = _private_ca(env, monkeypatch, tmp_path, AB_INSTALL_URL="http://boot.example:8090")
+    https = TestClient(c.app, base_url="https://testserver")
+    assert c.get("/claude/ca.crt").content == pem  # harmless over http: the fingerprint is what's checked
+    ps1 = https.get("/claude/install.ps1").text
+    assert f"$CaSha = '{sha}'" in ps1 and "Get-AbHttps" in ps1
+    assert "http://" not in ps1.replace("http://localhost", "")  # nothing from setup over plain http
+    sh = https.get("/claude/install.sh").text
+    assert f"CA_SHA='{sha}'" in sh and "CA_URL" not in sh and "http://boot.example" not in sh
+    me = c.get("/api/auth/me").json()["claude"]
+    assert me["private_ca"] is True and me["fingerprint"] == sha
+
+
+def test_private_ca_setup_lines_come_from_github_and_carry_the_fingerprint(env, monkeypatch, tmp_path):
+    c, _, sha = _private_ca(env, monkeypatch, tmp_path, AB_INSTALL_URL="http://boot.example:8090")
+    me = c.get("/api/auth/me").json()["claude"]
+    gh = "https://raw.githubusercontent.com/Seafinai/artifact-buckets/main/connect"
+    srv = "https://files.example.lan:8443"
+    assert me["unix"] == f"curl -fsSL {gh}/connect.sh | sh -s -- {srv} {sha}"
+    assert me["windows"] == f"& ([scriptblock]::Create((irm {gh}/connect.ps1))) {srv} {sha}"
+    assert me["uninstall_unix"] == f"curl -fsSL {gh}/connect.sh | sh -s -- {srv} {sha} remove"
+    assert me["uninstall_windows"].endswith(f"{srv} {sha} remove")
+    assert me["prompt"] == f"Set up Artifact Buckets on this computer by following {gh}/README.md for the server {srv} with certificate fingerprint {sha}"
+    assert me["remove_prompt"].startswith("Remove Artifact Buckets") and sha in me["remove_prompt"]
+    for line in (me["unix"], me["windows"], me["uninstall_unix"], me["uninstall_windows"], me["prompt"], me["remove_prompt"]):
+        assert "http://" not in line
+    # The connect script's address can be moved (a mirror inside a closed network).
+    c2, _, _ = _private_ca(env, monkeypatch, tmp_path, AB_CONNECT_URL="https://mirror.example/ab/")
+    assert c2.get("/api/auth/me").json()["claude"]["unix"].startswith("curl -fsSL https://mirror.example/ab/connect.sh | sh -s -- ")
+
+
+def test_private_ca_refuses_setup_scripts_over_plain_http(env, monkeypatch, tmp_path):
+    c, _, sha = _private_ca(env, monkeypatch, tmp_path)
+    https = TestClient(c.app, base_url="https://testserver")
+    for path in ("/claude/install.ps1", "/claude/install.sh", "/claude/uninstall.ps1", "/claude/uninstall.sh",
+                 "/claude/sync.ps1", "/claude/sync.sh", "/claude/setup.md"):
+        r = c.get(path)
+        assert r.status_code == 410 and "Connect page" in r.text, path
+        assert https.get(path).status_code == 200, path
+    # Behind the proxy, the scheme comes from X-Forwarded-Proto (uvicorn --proxy-headers).
+    md = https.get("/claude/setup.md").text
+    assert "connect.sh" in md and sha in md and "http://" not in md
+
+
+def test_public_certificate_keeps_its_own_lines(env, monkeypatch):
+    c = _client(env, monkeypatch)
+    me = c.get("/api/auth/me").json()["claude"]
+    assert me["unix"] == "curl -fsSL http://testserver/claude/install.sh | sh" and me["fingerprint"] is None
+    assert c.get("/claude/install.sh").status_code == 200
 
 
 def test_plugin_connection_gets_a_plain_name(env, monkeypatch):

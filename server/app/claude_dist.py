@@ -13,6 +13,11 @@ environment variable, clones a repository or types the server address.
   /claude/ca.crt                      only when AB_INSTALL_CA_FILE is set: a self-signed server
                                       certificate (not a CA, valid only for this server's address)
 
+With a self-signed certificate, the setup line doesn't come from this server at all: it fetches a small connect
+script from connect_url (GitHub, over HTTPS) and hands it this server's address and certificate fingerprint. The
+script checks the fingerprint before it trusts the server, then fetches install.ps1 or install.sh from here over
+that pinned connection. So no part of setup travels over plain http, where it could be swapped on the way.
+
 All of it is public and holds nothing secret: the plugin is the same for everyone, and signing in
 still happens in the browser.
 """
@@ -27,7 +32,7 @@ import re
 import zipfile
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from . import config
@@ -85,8 +90,10 @@ def marketplace_url() -> str:
 
 
 def install_base() -> str:
-    """Where the one-line installers are fetched from. Normally the server itself; a server with its own certificate sets a plain
-    http address here so a computer can fetch the installer before it trusts that certificate."""
+    """Where the one-line installers are fetched from: normally the server itself. A server with its own certificate
+    always uses itself (over HTTPS): older installs set a plain http address here, which is no longer used."""
+    if _ca() is not None:
+        return config.settings.base_url.rstrip("/")
     return (config.settings.install_url or config.settings.base_url).rstrip("/")
 
 
@@ -112,10 +119,26 @@ def managed_settings() -> dict[str, Any]:
     }
 
 
+def connect_lines(pin: str) -> dict[str, str]:
+    """The setup and removal lines for a server with a self-signed certificate: a connect script from connect_url
+    (public HTTPS), given this server's address and the certificate's SHA-256 fingerprint to check it against."""
+    cu, base = config.settings.connect_url, config.settings.base_url
+    guide = f"{cu}/README.md for the server {base} with certificate fingerprint {pin}"
+    return {
+        "windows": f"& ([scriptblock]::Create((irm {cu}/connect.ps1))) {base} {pin}",
+        "unix": f"curl -fsSL {cu}/connect.sh | sh -s -- {base} {pin}",
+        "uninstall_windows": f"& ([scriptblock]::Create((irm {cu}/connect.ps1))) {base} {pin} remove",
+        "uninstall_unix": f"curl -fsSL {cu}/connect.sh | sh -s -- {base} {pin} remove",
+        "prompt": f"Set up Artifact Buckets on this computer by following {guide}",
+        "remove_prompt": f"Remove Artifact Buckets from this computer by following {guide}",
+    }
+
+
 def setup_info() -> dict[str, Any]:
     """What the Connect page shows."""
     b = install_base()
-    return {
+    c = _ca()
+    info = {
         "windows": f"irm {b}/claude/install.ps1 | iex",
         "prompt": f"Set up Artifact Buckets on this computer by following {b}/claude/setup.md",
         "unix": f"curl -fsSL {b}/claude/install.sh | sh",
@@ -125,8 +148,22 @@ def setup_info() -> dict[str, Any]:
         "marketplace": marketplace_url(),
         "plugin": f"{PLUGIN}@{MARKETPLACE}",
         "managed_settings": managed_settings(),
-        "private_ca": _ca() is not None,
+        "private_ca": c is not None,
+        "fingerprint": c[1] if c else None,
     }
+    if c:
+        info.update(connect_lines(c[1]))
+    return info
+
+
+def _plain_http(request: Request) -> Response | None:
+    """With a self-signed certificate, setup scripts are only handed out over HTTPS (the connect script fetches
+    them over a connection pinned to the certificate). An old setup line that still asks over plain http gets
+    told where the new one is, instead of a script someone on the network could have swapped."""
+    if _ca() is None or request.url.scheme == "https":
+        return None
+    return PlainTextResponse("This setup line is out of date. Copy the new one from the Connect page in Artifact Buckets.\n",
+                             status_code=410, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/claude/marketplace.json")
@@ -161,20 +198,21 @@ def ca() -> Response:
 
 
 @router.get("/claude/install.ps1")
-def install_ps1() -> PlainTextResponse:
-    return PlainTextResponse(_script(PS1), headers={"Cache-Control": "no-cache"})
+def install_ps1(request: Request) -> Response:
+    return _plain_http(request) or PlainTextResponse(_script(PS1), headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/claude/setup.md")
-def setup_md() -> PlainTextResponse:
-    return PlainTextResponse(_setup_md(), media_type="text/markdown; charset=utf-8", headers={"Cache-Control": "no-cache"})
+def setup_md(request: Request) -> Response:
+    return _plain_http(request) or PlainTextResponse(_setup_md(), media_type="text/markdown; charset=utf-8", headers={"Cache-Control": "no-cache"})
 
 
 def _setup_md() -> str:
     c = _ca()
     b = install_base()
     base = config.settings.base_url
-    host = base.split("://", 1)[1].split("/", 1)[0].rsplit(":", 1)[0]
+    hostport = base.split("://", 1)[1].split("/", 1)[0]
+    host, port = (hostport.rsplit(":", 1) + ["443"])[:2] if ":" in hostport else (hostport, "443")
     sync_sha = _file_sha(os.path.join(plugin_dir(), "sync", "sync.ps1")).upper()
     mcp = f"plugin:{PLUGIN}:{SERVER}"
     out = [f"""# Connect Claude Code to Artifact Buckets
@@ -188,14 +226,7 @@ to repeat. The person makes one choice, on one page in their browser; don't ask 
 that the page already asks. If they told you up front to keep some folders out (a client's work, say), remind
 them to untick those on that page.
 
-**Use the setup script.** It does every step below, checks each one, and asks nothing in the terminal; it's
-short, so read it before running it. Save it to `~/.artifact-buckets/` and run it with a ten-minute timeout
-(the person presses Connect in the browser while it waits):
-
-- Windows: download {b}/claude/install.ps1, then
-  `powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\\.artifact-buckets\\install.ps1"`
-- macOS and Linux: download {b}/claude/install.sh, then `sh ~/.artifact-buckets/install.sh`
-
+{_use_script(b, c)}
 Then confirm `claude mcp list` shows `plugin:{PLUGIN}:{SERVER}` as Connected, and tell the person what happened
 (the script prints it). Only if the script can't run here (for example, scripts are blocked), do the numbered
 steps below by hand; they are exactly what the script does. To remove everything later, see the last section.
@@ -208,8 +239,11 @@ This server uses its own certificate: a self-signed server certificate, not a ce
 Constraints say CA:FALSE and it names only this server (`{host}` and its IP addresses), so it can vouch for
 this one server and nothing else. Nothing is added to the system's or the browser's trust store.
 
-- Download {b}/claude/ca.crt to `~/.artifact-buckets/server.crt` (on Windows `%USERPROFILE%\\.artifact-buckets\\server.crt`).
-- Its SHA-256 fingerprint (of the DER bytes) must be `{c[1]}`.
+- Get the certificate the server presents to `~/.artifact-buckets/server.crt` (on Windows
+  `%USERPROFILE%\\.artifact-buckets\\server.crt`): `openssl s_client -connect {host}:{port} </dev/null | openssl x509 > <path>`,
+  or {base}/claude/ca.crt downloaded with certificate checks off (`curl -k`). The fingerprint check below is what
+  makes either safe.
+- Its SHA-256 fingerprint (of the DER bytes) must be `{c[1]}`, the value the person gave you from the Connect page.
 - It must not be a CA, and its subject alternative names must be only `{host}` and IP addresses. On Windows:
   `$c = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 <path>; $c.Extensions | % {{ $_.Format($false) }}`;
   elsewhere `openssl x509 -in <path> -noout -text`.
@@ -244,7 +278,7 @@ turn on syncing (or sync again): then do the "Connect this computer" step and th
 ## {n + 2}. Connect this computer (one page in the browser)
 
 1. Save the sync script to `~/.artifact-buckets/` (on Windows `%USERPROFILE%\\.artifact-buckets\\`).
-   Windows: download {b}/claude/sync.ps1; its SHA-256 must be `{sync_sha}` (otherwise delete it and stop).
+   Windows: download {b}/claude/sync.ps1; its SHA-256 must be `{sync_sha}` (otherwise delete it and stop){' (the hash check is what makes this download safe, so certificate checks can be off for it)' if c else ''}.
    macOS and Linux: download {base}/claude/sync.sh{' with `curl --cacert ~/.artifact-buckets/server.crt`' if c else ''}.
    It's the same script the plugin ships.
 2. Run it with `link {base}` (Windows:
@@ -289,9 +323,7 @@ window (or `/reload-plugins` in this one) picks up the plugin. Something to try:
 
 Only when the person asks. Files already on the server stay there.
 
-**Use the removal script**, the same way as setup: download {b}/claude/uninstall.ps1 (Windows, run with
-`powershell -NoProfile -ExecutionPolicy Bypass -File <path>`) or {b}/claude/uninstall.sh (`sh <path>`), read it,
-and run it. Save it outside `~/.artifact-buckets`, which it deletes. Then check: `claude plugin list` no longer
+{_use_removal(b, c)} Then check: `claude plugin list` no longer
 shows `{PLUGIN}`, `~/.artifact-buckets` is gone, and `NODE_EXTRA_CA_CERTS` no longer points into it. Tell the
 person to close open Claude Code windows. Only if the script can't run, do these steps by hand:
 
@@ -308,29 +340,63 @@ person to close open Claude Code windows. Only if the script can't run, do these
     return "\n".join(out)
 
 
+def _use_script(b: str, c: tuple[bytes, str] | None) -> str:
+    if c:
+        cu = config.settings.connect_url
+        return f"""**Use the connect script.** This server has its own certificate, so setup starts from a script on GitHub
+({cu}/connect.sh, or connect.ps1 on Windows) that checks the certificate's fingerprint before trusting the
+server, then runs the server's own setup script over that checked connection. It does every step below,
+checks each one, and asks nothing in the terminal; it's short, so read it before running it. Save it outside
+`~/.artifact-buckets` and run it with a ten-minute timeout (the person presses Connect in the browser while it waits):
+
+- Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File <path to connect.ps1> {config.settings.base_url} {c[1]}`
+- macOS and Linux: `sh <path to connect.sh> {config.settings.base_url} {c[1]}`
+"""
+    return f"""**Use the setup script.** It does every step below, checks each one, and asks nothing in the terminal; it's
+short, so read it before running it. Save it to `~/.artifact-buckets/` and run it with a ten-minute timeout
+(the person presses Connect in the browser while it waits):
+
+- Windows: download {b}/claude/install.ps1, then
+  `powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\\.artifact-buckets\\install.ps1"`
+- macOS and Linux: download {b}/claude/install.sh, then `sh ~/.artifact-buckets/install.sh`
+"""
+
+
+def _use_removal(b: str, c: tuple[bytes, str] | None) -> str:
+    if c:
+        cu = config.settings.connect_url
+        return f"""**Use the connect script**, the same way as setup, with `remove` added after the fingerprint: download
+{cu}/connect.ps1 (Windows, run with `powershell -NoProfile -ExecutionPolicy Bypass -File <path> {config.settings.base_url} {c[1]} remove`)
+or {cu}/connect.sh (`sh <path> {config.settings.base_url} {c[1]} remove`), read it, and run it. Save it outside
+`~/.artifact-buckets`, which it deletes."""
+    return f"""**Use the removal script**, the same way as setup: download {b}/claude/uninstall.ps1 (Windows, run with
+`powershell -NoProfile -ExecutionPolicy Bypass -File <path>`) or {b}/claude/uninstall.sh (`sh <path>`), read it,
+and run it. Save it outside `~/.artifact-buckets`, which it deletes."""
+
+
 @router.get("/claude/uninstall.ps1")
-def uninstall_ps1() -> PlainTextResponse:
-    return PlainTextResponse(_script(UNINSTALL_PS1), headers={"Cache-Control": "no-cache"})
+def uninstall_ps1(request: Request) -> Response:
+    return _plain_http(request) or PlainTextResponse(_script(UNINSTALL_PS1), headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/claude/uninstall.sh")
-def uninstall_sh() -> PlainTextResponse:
-    return PlainTextResponse(_script(UNINSTALL_SH), headers={"Cache-Control": "no-cache"})
+def uninstall_sh(request: Request) -> Response:
+    return _plain_http(request) or PlainTextResponse(_script(UNINSTALL_SH), headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/claude/install.sh")
-def install_sh() -> PlainTextResponse:
-    return PlainTextResponse(_script(SH), headers={"Cache-Control": "no-cache"})
+def install_sh(request: Request) -> Response:
+    return _plain_http(request) or PlainTextResponse(_script(SH), headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/claude/sync.ps1")
-def sync_ps1() -> Response:
-    return _sync_script("sync.ps1")
+def sync_ps1(request: Request) -> Response:
+    return _plain_http(request) or _sync_script("sync.ps1")
 
 
 @router.get("/claude/sync.sh")
-def sync_sh() -> Response:
-    return _sync_script("sync.sh")
+def sync_sh(request: Request) -> Response:
+    return _plain_http(request) or _sync_script("sync.sh")
 
 
 def _sync_script(name: str) -> Response:
@@ -367,9 +433,10 @@ def _script(template: str) -> str:
         "MARKETPLACE": MARKETPLACE,
         "PLUGIN": f"{PLUGIN}@{MARKETPLACE}",
         "MCP_NAME": f"plugin:{PLUGIN}:{SERVER}",
-        "CA_URL": f"{install_base()}/claude/ca.crt" if c else "",
         "CA_SHA": c[1] if c else "",
         "INSTALL_BASE": install_base(),
+        "REMOVE_WINDOWS": setup_info()["uninstall_windows"],
+        "REMOVE_UNIX": setup_info()["uninstall_unix"],
         "PLUGIN_RE": re.escape(f"{PLUGIN}@{MARKETPLACE}"),
         "SYNC_PS1_SHA": _file_sha(os.path.join(plugin_dir(), "sync", "sync.ps1")).upper(),
     }
@@ -382,7 +449,6 @@ PS1 = r"""# Artifact Buckets: connect Claude Code on this computer. Safe to run 
 # Works in Windows PowerShell 5.1 and PowerShell 7. Asks nothing in the terminal: the one choice (which of
 # Claude's existing files to copy) is made on a page in the browser.
 $Server = '{{SERVER}}'
-$CaUrl = '{{CA_URL}}'
 $CaSha = '{{CA_SHA}}'
 
 function Step($m) { Write-Host "  $m" }
@@ -399,15 +465,19 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
 $dir = Join-Path $HOME '.artifact-buckets'
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
-if ($CaUrl) {
-  # Only for a server with its own (self-signed) certificate. Claude Code is told about it through
+if ($CaSha) {
+  # Only for a server with its own (self-signed) certificate. The connect script (from the Connect page) has
+  # already checked it against the fingerprint and saved it, and it runs this script in its own scope, with
+  # Get-AbHttps for downloads pinned to that certificate. Claude Code is told about it through
   # NODE_EXTRA_CA_CERTS; nothing goes into the Windows certificate store, so Windows asks nothing.
+  $ca = Join-Path $dir 'server.crt'
+  if (-not (Get-Command Get-AbHttps -ErrorAction SilentlyContinue) -or -not (Test-Path -LiteralPath $ca)) {
+    Stop-Setup "This server has its own certificate. Use the setup line from the Connect page: it checks the certificate first."; return
+  }
   try {
-    $ca = Join-Path $dir 'server.crt'
-    Invoke-WebRequest -UseBasicParsing -Uri $CaUrl -OutFile $ca -ErrorAction Stop
     $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $ca
     $sha = [BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash($cert.RawData)).Replace('-', '')
-    if ($sha -ne $CaSha) { Remove-Item -LiteralPath $ca -Force; Stop-Setup "The server's certificate didn't match what was expected. Nothing was changed."; return }
+    if ($sha -ne $CaSha) { Stop-Setup "The server's certificate didn't match what was expected. Nothing was changed."; return }
     $cur = [Environment]::GetEnvironmentVariable('NODE_EXTRA_CA_CERTS', 'User')
     if ($cur -and $cur -ne $ca) { Stop-Setup "NODE_EXTRA_CA_CERTS is already set to $cur. Add this server's certificate ($ca) to that file, then run this again."; return }
     [Environment]::SetEnvironmentVariable('NODE_EXTRA_CA_CERTS', $ca, 'User')
@@ -427,9 +497,12 @@ Step "Plugin installed"
 $sync = Join-Path $dir 'sync.ps1'
 $ps = Join-Path $PSHOME 'powershell.exe'; if (-not (Test-Path $ps)) { $ps = 'powershell.exe' }
 function Sync-Do { & $ps -NoProfile -ExecutionPolicy Bypass -File $sync @args }
-# From the same place as this script, checked against the fingerprint this script carries.
-try { Invoke-WebRequest -UseBasicParsing -Uri '{{INSTALL_BASE}}/claude/sync.ps1' -OutFile $sync -ErrorAction Stop }
-catch { Stop-Setup "Couldn't download the sync script from {{INSTALL_BASE}} ($($_.Exception.Message))."; return }
+# From the server (over the pinned connection when it has its own certificate), checked against the
+# fingerprint this script carries.
+try {
+  if ($CaSha) { [IO.File]::WriteAllBytes($sync, (Get-AbHttps "$Server/claude/sync.ps1" $CaSha)) }
+  else { Invoke-WebRequest -UseBasicParsing -Uri '{{INSTALL_BASE}}/claude/sync.ps1' -OutFile $sync -ErrorAction Stop }
+} catch { Stop-Setup "Couldn't download the sync script from $Server ($($_.Exception.Message))."; return }
 if ((Get-FileHash -LiteralPath $sync -Algorithm SHA256).Hash -ne '{{SYNC_PS1_SHA}}') {
   Remove-Item -LiteralPath $sync -Force; Stop-Setup "The sync script didn't match what was expected. Nothing was changed."; return
 }
@@ -464,7 +537,7 @@ else {
 Write-Host ""
 Write-Host "  Done. Claude Code can now save to Artifact Buckets." -ForegroundColor Green
 Write-Host "  Open a new Claude Code window and try: save this to my buckets" -ForegroundColor DarkGray
-Write-Host "  To remove it later: irm {{INSTALL_BASE}}/claude/uninstall.ps1 | iex" -ForegroundColor DarkGray
+Write-Host '  To remove it later: {{REMOVE_WINDOWS}}' -ForegroundColor DarkGray
 Write-Host ""
 """
 
@@ -474,7 +547,6 @@ SH = r"""#!/bin/sh
 # Asks nothing in the terminal: the one choice (which of Claude's existing files to copy) is made in the browser.
 set -eu
 SERVER='{{SERVER}}'
-CA_URL='{{CA_URL}}'
 CA_SHA='{{CA_SHA}}'
 
 say() { printf '  %s\n' "$1"; }
@@ -501,14 +573,15 @@ command -v claude >/dev/null 2>&1 || quit "Claude Code isn't installed yet. Inst
 dir="$HOME/.artifact-buckets"; mkdir -p "$dir"
 CURL_CA=
 
-if [ -n "$CA_URL" ]; then
-  # Only for a server with its own (self-signed) certificate. Claude Code reads NODE_EXTRA_CA_CERTS only at
-  # startup, so it goes in the shell profile (a settings.json env entry comes too late for TLS). Nothing is
-  # added to the system or keychain trust store, so nothing asks for a password.
+if [ -n "$CA_SHA" ]; then
+  # Only for a server with its own (self-signed) certificate. The connect script (from the Connect page) has
+  # already checked it against the fingerprint and saved it; this checks it again. Claude Code reads
+  # NODE_EXTRA_CA_CERTS only at startup, so it goes in the shell profile (a settings.json env entry comes too
+  # late for TLS). Nothing is added to the system or keychain trust store, so nothing asks for a password.
   ca="$dir/server.crt"
-  curl -fsSL "$CA_URL" -o "$ca"
-  sha=$(openssl x509 -in "$ca" -outform der | openssl dgst -sha256 -r | cut -d' ' -f1 | tr a-f A-F)
-  [ "$sha" = "$CA_SHA" ] || { rm -f "$ca"; quit "The server's certificate didn't match what was expected. Nothing was changed."; }
+  [ -f "$ca" ] || quit "This server has its own certificate. Use the setup line from the Connect page: it checks the certificate first."
+  sha=$(openssl x509 -in "$ca" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//' | tr -d ':' | tr a-f A-F)
+  [ "$sha" = "$CA_SHA" ] || quit "The server's certificate didn't match what was expected. Nothing was changed."
   if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ "$NODE_EXTRA_CA_CERTS" != "$ca" ]; then
     quit "NODE_EXTRA_CA_CERTS is already set to $NODE_EXTRA_CA_CERTS. Add this server's certificate ($ca) to that file, then run this again."
   fi
@@ -553,7 +626,7 @@ else
 fi
 
 printf '\n  Done. Claude Code can now save to Artifact Buckets.\n  Open a new terminal, start Claude Code and try: save this to my buckets\n'
-printf '  To remove it later: curl -fsSL {{INSTALL_BASE}}/claude/uninstall.sh | sh\n\n'
+printf '  To remove it later: %s\n\n' '{{REMOVE_UNIX}}'
 """
 
 
