@@ -596,7 +596,7 @@ if [ -n "$CA_SHA" ]; then
     fi
   done
   export NODE_EXTRA_CA_CERTS="$ca"
-  CURL_CA="--cacert $ca"
+  CURL_CA="--cacert $ca --capath /dev/null"   # only this certificate, not the system's authorities too
   say "Server certificate checked"
 fi
 

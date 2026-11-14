@@ -20,6 +20,9 @@ SERVER=${1:-}
 PIN=${2:-}
 ACTION=${3:-setup}
 [ -n "$SERVER" ] && [ -n "$PIN" ] || quit "$usage"
+nl='
+'
+case $SERVER$PIN in *"$nl"*) quit "$usage" ;; esac
 case $ACTION in setup|remove) ;; *) quit "$usage" ;; esac
 
 # The server: https only, a host name or IPv4 address and an optional port, nothing else.
@@ -62,7 +65,8 @@ cp "$tmp/server.crt" "$dir/server.crt.new" && mv -f "$dir/server.crt.new" "$dir/
 
 # 3. The server's own script, over HTTPS that only that certificate can satisfy.
 case $ACTION in setup) name=install.sh ;; remove) name=uninstall.sh ;; esac
-curl -fsS --proto '=https' --cacert "$dir/server.crt" "$SERVER/claude/$name" -o "$tmp/$name" \
+# --capath /dev/null: only that certificate, not the system's certificate authorities too (curl keeps them otherwise).
+curl -fsS --proto '=https' --cacert "$dir/server.crt" --capath /dev/null "$SERVER/claude/$name" -o "$tmp/$name" \
   || quit "Couldn't download the setup script from $SERVER over a checked connection. If you reach the server by an address
   its certificate doesn't name, use the address on the Connect page."
 sh "$tmp/$name"

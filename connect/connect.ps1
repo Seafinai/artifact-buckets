@@ -18,11 +18,11 @@ $usage = "Copy the full line from the Connect page: it ends with the server's ad
 
 if (-not $Server -or -not $Fingerprint -or @('setup', 'remove') -notcontains $Action) { Stop-Connect $usage; return }
 $Server = $Server.TrimEnd('/')
-if ($Server -notmatch '^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?$') {
+if ($Server -notmatch '^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?\z') {
   Stop-Connect "'$Server' isn't a server address this script can use (it must start with https://). $usage"; return
 }
 $AbPin = ($Fingerprint -replace '[:\s]', '').ToUpperInvariant()
-if ($AbPin -notmatch '^[0-9A-F]{64}$') { Stop-Connect "'$Fingerprint' isn't a SHA-256 fingerprint (64 hex digits). $usage"; return }
+if ($AbPin -notmatch '^[0-9A-F]{64}\z') { Stop-Connect "'$Fingerprint' isn't a SHA-256 fingerprint (64 hex digits). $usage"; return }
 
 # One HTTPS request whose certificate must be exactly the pinned one. The certificate is compared right after
 # the TLS handshake, before a single byte of the request is sent; the system trust store plays no part.
@@ -52,7 +52,8 @@ function Get-AbHttps([string]$Url, [string]$Pin = $AbPin) {
     if ($head -notmatch '^HTTP/1\.[01] 200 ') { throw "$Url answered: $(($head -split "`r`n")[0])" }
     $body = New-Object byte[] ($all.Length - $end - 4)
     [Array]::Copy($all, $end + 4, $body, 0, $body.Length)
-    if ($head -match '(?im)^Content-Length:\s*(\d+)\s*$' -and [int64]$Matches[1] -ne $body.Length) { throw "The download from $Url was cut short." }
+    # The whole script or nothing: a reply without its length, or shorter than it, is refused (never run cut short).
+    if ($head -notmatch '(?im)^Content-Length:\s*(\d+)\s*$' -or [int64]$Matches[1] -ne $body.Length) { throw "The download from $Url was cut short." }
     if ($head -match '(?im)^Transfer-Encoding:') { throw "Unexpected reply from $Url" }
     return ,$body
   } finally { $tcp.Close() }

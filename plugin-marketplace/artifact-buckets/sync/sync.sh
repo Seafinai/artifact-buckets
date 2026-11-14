@@ -43,7 +43,7 @@ human() { awk -v b="$1" 'BEGIN{ split("B KB MB GB",u," "); i=1; while (b>=1024 &
 
 SERVER=$(conf server); TOKEN=$(conf token); CA=$(conf ca)
 curl_() {
-  if [ -n "$CA" ] && [ -f "$CA" ]; then curl --cacert "$CA" "$@"; else curl "$@"; fi
+  if [ -n "$CA" ] && [ -f "$CA" ]; then curl --cacert "$CA" --capath /dev/null "$@"; else curl "$@"; fi
 }
 
 # The folders a first copy would fill, as JSON for the Connect page: [{"folder","files","bytes","source"}].
