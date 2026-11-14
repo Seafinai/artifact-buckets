@@ -1,7 +1,7 @@
 #!/bin/sh
 # Artifact Buckets: one-line install for a Linux host.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Trit1967/artifact-buckets/main/install.sh | sudo sh
+#   curl -fsSL https://raw.githubusercontent.com/Seafinai/artifact-buckets/main/install.sh | sudo sh
 #
 # It asks two questions (the address people will use, and an email for the admin and for Let's Encrypt),
 # installs Docker if it is missing, and starts the app with HTTPS. Without a terminal, or to skip the
@@ -37,8 +37,8 @@ umask 022
 # ---- Names: change these to rename the project ---------------------------------------------------------
 APP_NAME="Artifact Buckets"
 APP_SLUG="artifact-buckets"
-REPO="Trit1967/artifact-buckets"
-IMAGE_REPO="ghcr.io/trit1967/artifact-buckets"
+REPO="Seafinai/artifact-buckets"
+IMAGE_REPO="ghcr.io/seafinai/artifact-buckets"
 # ---------------------------------------------------------------------------------------------------------
 
 DIR="${AB_DIR:-/opt/$APP_SLUG}"
