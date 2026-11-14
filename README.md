@@ -48,7 +48,7 @@ across laptops. Artifact Buckets gives every person and team one place for it: C
 On a Linux machine (Ubuntu, Debian, Fedora and friends) with a name or address people can reach:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Trit1967/artifact-buckets/main/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/Seafinai/artifact-buckets/main/install.sh | sudo sh
 ```
 
 It asks for the address people will use and an admin email, installs Docker if it's missing, and starts the app
@@ -68,7 +68,7 @@ Nothing else on the machine changes, apart from Docker if it had to be installed
 <summary>No questions (for scripts and cloud-init), and other options</summary>
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Trit1967/artifact-buckets/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/Seafinai/artifact-buckets/main/install.sh \
   | sudo sh -s -- --host files.example.com --email you@example.com --yes
 ```
 
