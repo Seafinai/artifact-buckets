@@ -73,7 +73,7 @@ def _private_ca(env, monkeypatch, tmp_path, **extra):
 def test_private_ca_is_pinned_in_installers(env, monkeypatch, tmp_path):
     c, pem, sha = _private_ca(env, monkeypatch, tmp_path, AB_INSTALL_URL="http://boot.example:8090")
     https = TestClient(c.app, base_url="https://testserver")
-    assert c.get("/claude/ca.crt").content == pem  # harmless over http: the fingerprint is what's checked
+    assert https.get("/claude/ca.crt").content == pem
     ps1 = https.get("/claude/install.ps1").text
     assert f"$CaSha = '{sha}'" in ps1 and "Get-AbHttps" in ps1
     assert "http://" not in ps1.replace("http://localhost", "")  # nothing from setup over plain http
@@ -105,7 +105,7 @@ def test_private_ca_refuses_setup_scripts_over_plain_http(env, monkeypatch, tmp_
     c, _, sha = _private_ca(env, monkeypatch, tmp_path)
     https = TestClient(c.app, base_url="https://testserver")
     for path in ("/claude/install.ps1", "/claude/install.sh", "/claude/uninstall.ps1", "/claude/uninstall.sh",
-                 "/claude/sync.ps1", "/claude/sync.sh", "/claude/setup.md"):
+                 "/claude/sync.ps1", "/claude/sync.sh", "/claude/setup.md", "/claude/ca.crt"):
         r = c.get(path)
         assert r.status_code == 410 and "Connect page" in r.text, path
         assert https.get(path).status_code == 200, path

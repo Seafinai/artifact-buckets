@@ -189,7 +189,12 @@ def managed() -> JSONResponse:
 
 
 @router.get("/claude/ca.crt")
-def ca() -> Response:
+def ca(request: Request) -> Response:
+    # Not over plain http either: nothing needs it there now (the connect script reads the certificate from the
+    # TLS handshake), and an install upgraded once by an older CLI still routes it from http to here.
+    refused = _plain_http(request)
+    if refused:
+        return refused
     c = _ca()
     if c is None:
         return JSONResponse({"error": "not_found", "message": "This server uses a public certificate"}, status_code=404)
