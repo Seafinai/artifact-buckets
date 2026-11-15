@@ -355,7 +355,6 @@ choose_address() {
   esac
 
   if [ "$PUB_HTTPS" = 443 ]; then BASE_URL="https://$HOST"; else BASE_URL="https://$HOST:$PUB_HTTPS"; fi
-  if [ "$PUB_HTTP" = 80 ]; then PLAIN_URL="http://$HOST"; else PLAIN_URL="http://$HOST:$PUB_HTTP"; fi
 
   # Every address the self-signed certificate names: this machine's own, plus any given with --ip
   # (an outer address behind NAT or a port forward), plus the one the name resolves to.
@@ -404,10 +403,9 @@ write_caddyfile() {
         _sites="https://$HOST"
         for _x in $ALL_IPS; do [ "$_x" = "$HOST" ] || _sites="$_sites, https://$_x"; done
         printf '%s {\n\ttls /certs/public/server.crt /certs/server.key\n\timport app\n}\n\n' "$_sites"
-        # Plain http only hands out the Claude Code setup files and the certificate (a computer needs them
-        # before it trusts the certificate); everything else goes to https.
-        printf 'http:// {\n\t@setup path /claude/install.ps1 /claude/install.sh /claude/uninstall.ps1 /claude/uninstall.sh /claude/sync.ps1 /claude/setup.md /claude/ca.crt\n'
-        printf '\thandle @setup {\n\t\treverse_proxy app:8080\n\t}\n\thandle {\n\t\tredir %s{uri} 308\n\t}\n\theader -Server\n}\n' "$BASE_URL" ;;
+        # Plain http only sends people to https. Claude Code setup starts from a script on GitHub that checks
+        # this certificate's fingerprint, so nothing needs to be fetched over plain http first.
+        printf 'http:// {\n\tredir %s{uri} 308\n\theader -Server\n}\n' "$BASE_URL" ;;
     esac
   } >"$DIR/Caddyfile"
 }
@@ -437,13 +435,27 @@ write_env() {
   env_set AB_SMB_ENABLED false
   env_set AB_SMB_HOST "$HOST"
   [ -z "$CA_FILE" ] || env_set AB_BUILD_CA "$CA_FILE"
-  if [ "$TLS" = self-signed ]; then
-    env_set AB_INSTALL_URL "$PLAIN_URL"
-    env_set AB_INSTALL_CA_FILE /certs/server.crt
-  else
-    env_set AB_INSTALL_URL ""
-    env_set AB_INSTALL_CA_FILE ""
-  fi
+  env_set AB_INSTALL_URL ""
+  if [ "$TLS" = self-signed ]; then env_set AB_INSTALL_CA_FILE /certs/server.crt; else env_set AB_INSTALL_CA_FILE ""; fi
+  set_connect_url
+}
+
+# Where the Claude Code connect scripts come from (for a self-signed certificate): this repository on GitHub,
+# at the same branch or tag the server was installed from, over HTTPS.
+set_connect_url() {
+  case $(env_get AB_SOURCE) in
+    '') env_set AB_CONNECT_URL "https://raw.githubusercontent.com/$REPO/$REF/connect" ;;
+    *) [ -n "$(env_get AB_CONNECT_URL)" ] || env_set AB_CONNECT_URL "https://raw.githubusercontent.com/$REPO/main/connect" ;;
+  esac
+}
+
+# Installs from before the connect script handed out the Claude Code setup files over plain http. Stop that.
+migrate_plain_http_setup() {
+  [ -f "$DIR/Caddyfile" ] && grep -q '@setup' "$DIR/Caddyfile" || return 0
+  _t=$(mktemp "$DIR/.Caddyfile.XXXXXX")
+  sed '/@setup path/d; /handle @setup {/,/^\t}/d' "$DIR/Caddyfile" >"$_t"
+  chmod 644 "$_t"; mv "$_t" "$DIR/Caddyfile"
+  env_set AB_INSTALL_URL ""
 }
 
 # ZFS: files on their own dataset, with restore points taken by a small root helper (bucketsd) that the
@@ -543,7 +555,6 @@ wait_ready() {
 
 summary() {
   _pw=$(env_get AB_BOOTSTRAP_PASSWORD)
-  _ib=$BASE_URL; [ "$TLS" != self-signed ] || _ib=$PLAIN_URL
   say ""
   say "${B}$APP_NAME is running.${R}"
   say ""
@@ -552,12 +563,18 @@ summary() {
   say "              (also in $DIR/.env; change it after you sign in)"
   say ""
   say "  Connect Claude Code on a computer:"
-  say "    Windows (PowerShell):  irm $_ib/claude/install.ps1 | iex"
-  say "    macOS / Linux:         curl -fsSL $_ib/claude/install.sh | sh"
   if [ "$TLS" = self-signed ]; then
+    _fp=$(openssl x509 -in "$DIR/data/tls/public/server.crt" -noout -fingerprint -sha256 | sed 's/.*=//' | tr -d ':')
+    _cu=$(env_get AB_CONNECT_URL)
+    say "    Windows (PowerShell):  & ([scriptblock]::Create((irm $_cu/connect.ps1))) $BASE_URL $_fp"
+    say "    macOS / Linux:         curl -fsSL $_cu/connect.sh | sh -s -- $BASE_URL $_fp"
     say ""
-    say "  ${D}The certificate is self-signed, so browsers warn the first time. The Claude Code setup above"
-    say "  checks it and points Claude Code at it (for this server only).${R}"
+    say "  ${D}The certificate is self-signed, so browsers warn the first time. Its SHA-256 fingerprint is"
+    say "  $_fp"
+    say "  The setup lines above (also on the Connect page) check it before trusting the server.${R}"
+  else
+    say "    Windows (PowerShell):  irm $BASE_URL/claude/install.ps1 | iex"
+    say "    macOS / Linux:         curl -fsSL $BASE_URL/claude/install.sh | sh"
   fi
   [ -n "$HTTPS_OK" ] || { say ""; warn "HTTPS didn't answer yet on $BASE_URL. With Let's Encrypt the first certificate can take a minute; 'sudo $APP_SLUG logs caddy' shows why."; }
   if [ "$PUB_HTTPS" != "$HTTPS_PORT" ] || [ "$PUB_HTTP" != "$HTTP_PORT" ]; then
@@ -602,6 +619,8 @@ cmd_upgrade() {
   [ -f "$DIR/.$APP_SLUG-install" ] && [ -f "$DIR/.env" ] || die "$APP_NAME isn't installed in $DIR."
   ensure_docker
   fetch_source
+  migrate_plain_http_setup
+  set_connect_url
   _cur=$(env_get AB_IMAGE)
   case $_cur in *:local) BUILD=1 ;; esac
   [ -n "$CA_FILE" ] || { CA_FILE=$(env_get AB_BUILD_CA); [ -f "$CA_FILE" ] || CA_FILE=""; }
