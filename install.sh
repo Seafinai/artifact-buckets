@@ -56,7 +56,7 @@ ZFS_GROUP="$APP_SLUG-zfs"
 
 HOST="" EMAIL="" TLS="auto" CERT="" KEY="" HTTPS_PORT="" HTTP_PORT="" ZFS="" NO_ZFS="" IMAGE="" BUILD=""
 SOURCE="${AB_SOURCE:-}" CA_FILE="" YES="" PURGE="" HOST_GIVEN="" OLD_IMAGE_ID=""
-EXTRA_IPS="" PUB_HTTPS="" PUB_HTTP="" DOCKER_NEW=""
+EXTRA_IPS="" PUB_HTTPS="" PUB_HTTP="" DOCKER_NEW="" KEPT_DATA="" CMD=""
 
 if [ -t 1 ]; then B=$(printf '\033[1m'); D=$(printf '\033[2m'); R=$(printf '\033[0m'); else B="" D="" R=""; fi
 say()  { printf '%s\n' "$*"; }
@@ -202,7 +202,7 @@ ensure_docker() {
   if ! have docker; then
     say "Docker isn't installed. It's needed to run $APP_NAME (from get.docker.com, the official script)."
     yesno "Install Docker now?" Y || die "Install Docker (https://docs.docker.com/engine/install/) and run again."
-    step "Installing Docker"
+    step "Installing Docker ${D}(a minute or two)${R}"
     _gd=$(mktemp); _log=$(mktemp)
     fetch https://get.docker.com "$_gd" || die "Couldn't download get.docker.com."
     if ! sh "$_gd" >"$_log" 2>&1; then tail -n 20 "$_log" >&2; rm -f "$_gd"; die "Installing Docker failed (log above, full log in $_log)."; fi
@@ -226,7 +226,8 @@ fetch_source() {
   if [ -z "$SOURCE" ] && [ -n "$_here" ] && [ -f "$_here/deploy/install/compose.yml" ] && [ "$_here" != "$DIR/src" ]; then
     SOURCE=$_here
   fi
-  [ -n "$SOURCE" ] || SOURCE=$(env_get AB_SOURCE)
+  # upgrade keeps using a source given earlier; running the installer again starts from GitHub unless told otherwise.
+  [ -n "$SOURCE" ] || [ "$CMD" != upgrade ] || SOURCE=$(env_get AB_SOURCE)
   [ -n "$SOURCE" ] || SOURCE="https://codeload.github.com/$REPO/tar.gz/$REF"
   step "Getting $APP_NAME from $SOURCE"
   _new="$DIR/src.new"
@@ -559,8 +560,13 @@ summary() {
   say "${B}$APP_NAME is running.${R}"
   say ""
   say "  Open        $BASE_URL"
-  say "  Sign in     admin / $_pw"
-  say "              (also in $DIR/.env; change it after you sign in)"
+  if [ -n "$KEPT_DATA" ]; then
+    say "  Sign in     with the accounts you already had; files and settings were kept"
+    say "              (lost the admin password? sudo $APP_SLUG reset-password)"
+  else
+    say "  Sign in     admin / $_pw"
+    say "              (also in $DIR/.env; change it after you sign in)"
+  fi
   say ""
   say "  Connect Claude Code on a computer:"
   if [ "$TLS" = self-signed ]; then
@@ -593,6 +599,8 @@ cmd_install() {
   need_root
   take_lock
   say "${B}$APP_NAME installer${R}  ${D}($DIR)${R}"
+  # Data from an earlier install (kept by a plain uninstall) is picked up again.
+  [ -z "$(ls -A "$DIR/data/db" 2>/dev/null)" ] || KEPT_DATA=1
   ensure_tools
   if [ -d "$DIR" ] && [ ! -f "$DIR/.$APP_SLUG-install" ] && [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
     die "$DIR already has files and isn't a $APP_NAME install. Choose an empty or new folder with --dir."
@@ -670,7 +678,9 @@ cmd_uninstall() {
   else
     rm -rf "${DIR:?}/src" "${DIR:?}/src.new" "${DIR:?}/bin" "$DIR/compose.yml" "$DIR/Caddyfile" "${DIR:?}/${APP_SLUG:?}"
     # The marker stays with the data so the folder can still be purged later.
-    say "Removed $APP_NAME. Your data is still in $DIR (delete it with: sudo rm -rf $DIR${ZFS:+, and zfs destroy -r $ZFS})."
+    say "Removed $APP_NAME. Your files, database and settings are still in $DIR."
+    say "  Install again:   curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo sh"
+    say "  Delete them too: curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo sh -s -- uninstall --purge"
   fi
   say "${D}Docker itself was left installed.${R}"
 }
@@ -744,6 +754,7 @@ main() {
     /bin|/boot|/dev|/etc|/home|/lib|/lib64|/media|/mnt|/opt|/proc|/root|/run|/sbin|/srv|/sys|/tmp|/usr|/usr/*|/var|/var/lib)
       die "--dir $DIR is a system folder; use a folder of its own, such as /opt/$APP_SLUG." ;;
   esac
+  CMD=$_cmd
   case $_cmd in
     install) cmd_install ;;
     upgrade) cmd_upgrade ;;
