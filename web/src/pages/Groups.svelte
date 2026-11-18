@@ -3,7 +3,7 @@
   import { session } from '../lib/session.svelte.js';
   import { route, navigate } from '../lib/router.svelte.js';
   import { toast, fail } from '../lib/toast.svelte.js';
-  import { ago } from '../lib/format.js';
+  import { ago, slug } from '../lib/format.js';
   import Icon from '../lib/Icon.svelte';
   import Modal from '../lib/Modal.svelte';
   import Avatar from '../lib/Avatar.svelte';
@@ -175,9 +175,9 @@
 {#if dialog === 'new'}
   <Modal title="New group" onclose={() => (dialog = null)}>
     <form onsubmit={createGroup} style="display:flex;flex-direction:column;gap:14px">
-      <label class="lbl">Name<input class="field mono" bind:value={form.name} required pattern="[a-z0-9][a-z0-9_\-]*" placeholder="platform-eng" /></label>
+      <label class="lbl">Name<input class="field mono" value={form.name} oninput={(e) => (e.currentTarget.value = form.name = slug(e.currentTarget.value))} required placeholder="platform-eng" autocapitalize="none" spellcheck="false" /></label>
       <label class="lbl">Description<input class="field" bind:value={form.description} /></label>
-      <p class="note" style="margin:0">Creates <span class="mono">/shared/{form.name || '<name>'}</span> with Editor for members. For AD-backed groups, create <span class="mono">AB-{form.name || '<name>'}</span> in AD instead and sync.</p>
+      <p class="note" style="margin:0">Makes the team folder <span class="mono">/shared/{form.name || 'name'}</span>, where members can save and edit.{#if session.directory}{' '}For a group that comes from Active Directory, create <span class="mono">AB-{form.name || 'name'}</span> there instead and sync.{/if}</p>
       <div class="row" style="justify-content:flex-end"><button type="button" class="btn" onclick={() => (dialog = null)}>Cancel</button><button class="btn pri">Create</button></div>
     </form>
   </Modal>

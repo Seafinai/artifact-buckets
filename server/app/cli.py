@@ -11,10 +11,9 @@ import sys
 
 from sqlalchemy import delete, select
 
-from . import audit, config
+from . import accounts, audit, config
 from .db import User, WebSession, init_engine, new_session
 from .perms import Actor
-from .security import hash_password
 
 
 def reset_password(username: str) -> str:
@@ -24,7 +23,7 @@ def reset_password(username: str) -> str:
         if u is None or u.source != "local":
             raise SystemExit(f"No local account named '{username}'.")
         pw = secrets.token_urlsafe(15)
-        u.password_hash = hash_password(pw)
+        accounts.set_password(db, u, pw, temporary=True)
         if u.status != "active":
             u.status = "active"
         db.execute(delete(WebSession).where(WebSession.user_id == u.id))

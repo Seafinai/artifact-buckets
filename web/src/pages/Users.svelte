@@ -8,6 +8,7 @@
   import Modal from '../lib/Modal.svelte';
   import Avatar from '../lib/Avatar.svelte';
   import RoleTag from '../lib/RoleTag.svelte';
+  import { slug } from '../lib/format.js';
 
   let users = $state(null);
   let groups = $state([]);
@@ -62,10 +63,10 @@
 
 <div class="page">
   <header class="page-head">
-    <div><h1>Users</h1><p class="sub">Everyone with an account. People from Active Directory arrive by sync; local accounts are for testing and service use.</p></div>
+    <div><h1>Users</h1><p class="sub">{session.directory ? 'Everyone with an account. People from Active Directory arrive by sync.' : 'Everyone with an account. Each person gets a home folder that Claude Code saves into.'}</p></div>
     <div class="row wrap">
       {#if session.isAdmin}
-        <button class="btn" onclick={sync}><Icon name="refresh" />Sync directory</button>
+        {#if session.directory}<button class="btn" onclick={sync}><Icon name="refresh" />Sync directory</button>{/if}
         <button class="btn pri" onclick={() => { form = blank(); dialog = { kind: 'new' }; }}><Icon name="plus" />Add person</button>
       {/if}
     </div>
@@ -78,7 +79,7 @@
       <input class="field" type="search" placeholder="Name, email or group" bind:value={q} style="padding-left:36px" />
     </label>
     <div class="segs" role="group" aria-label="Filter">
-      {#each [['all', 'Everyone'], ['admins', 'Admins and auditors'], ['ad', 'From AD'], ['suspended', 'Suspended']] as [k, l]}
+      {#each [['all', 'Everyone'], ['admins', 'Admins and auditors'], ...(session.directory ? [['ad', 'From AD']] : []), ['suspended', 'Suspended']] as [k, l]}
         <button class="seg" class:on={filter === k} aria-pressed={filter === k} onclick={() => (filter = k)}>{l}</button>
       {/each}
     </div>
@@ -136,13 +137,13 @@
 {#if dialog?.kind === 'new'}
   <Modal title="Add a person" onclose={() => (dialog = null)} width={560}>
     <form onsubmit={create} style="display:flex;flex-direction:column;gap:14px">
-      <p class="note" style="margin:0">People in Active Directory don't need adding: put them in an <span class="mono">AB-</span> group and sync. Use this for local and test accounts.</p>
+      {#if session.directory}<p class="note" style="margin:0">People in Active Directory don't need adding: put them in an <span class="mono">AB-</span> group and sync. This is for accounts outside the directory.</p>{/if}
       <div class="row wrap" style="gap:12px">
-        <label class="lbl grow">Username<input class="field mono" bind:value={form.username} required pattern="[a-z0-9][a-z0-9._\-]*" autocapitalize="none" /></label>
+        <label class="lbl grow">Username<input class="field mono" value={form.username} oninput={(e) => (e.currentTarget.value = form.username = slug(e.currentTarget.value, true))} required autocapitalize="none" spellcheck="false" /></label>
         <label class="lbl grow">Display name<input class="field" bind:value={form.display_name} /></label>
       </div>
       <label class="lbl">Email (optional)<input class="field" type="email" bind:value={form.email} /></label>
-      <label class="lbl">Temporary password<input class="field" type="password" minlength="12" bind:value={form.password} required autocomplete="new-password" /><span class="note">At least 12 characters.</span></label>
+      <label class="lbl">Temporary password<input class="field" type="password" minlength="12" bind:value={form.password} required autocomplete="new-password" /><span class="note">At least 12 characters. They choose their own the first time they sign in.</span></label>
       <label class="lbl">Role<select class="field" bind:value={form.system_role}><option value="member">Member</option><option value="auditor">Auditor: reads the audit log and access reports, not files</option><option value="admin">Admin: Owner of every folder</option></select></label>
       {#if groups.length}
         <fieldset class="gs"><legend class="lbl">Local groups</legend>

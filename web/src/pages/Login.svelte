@@ -53,9 +53,11 @@
       <div class="row" style="gap:12px"><Logo size={30} /><span style="font-size:17px;font-weight:600;letter-spacing:-0.01em">Artifact Buckets</span></div>
       <div style="display:flex;flex-direction:column;gap:6px">
         <h1>{fromClaude ? 'Sign in to connect Claude Code' : 'Sign in'}</h1>
-        <p class="muted" style="margin:0;font-size:13px;line-height:1.5">
-          {fromClaude ? 'After you sign in you’ll confirm which computer is connecting.' : 'Use your work account.'}
-        </p>
+        {#if fromClaude || session.directory || session.oidc}
+          <p class="muted" style="margin:0;font-size:13px;line-height:1.5">
+            {fromClaude ? 'After you sign in you’ll confirm which computer is connecting.' : 'Use your work account.'}
+          </p>
+        {/if}
       </div>
       {#if session.oidc}
         <a class="btn ms" data-native href={`/auth/oidc/login?next=${encodeURIComponent(next || '/')}`}>

@@ -9,13 +9,33 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import acl, audit, fs, paths
-from .db import File, Grant, Group, Membership, Token, User, WebSession, set_setting, utcnow
+from .db import File, Grant, Group, Membership, PasswordState, Token, User, WebSession, set_setting, utcnow
 from .errors import BadRequest, Conflict, Forbidden, NotFound
 from .perms import Actor
 from .security import hash_password
 
 USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 GROUPNAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+
+def set_password(db: Session, u: User, password: str, *, temporary: bool) -> None:
+    """Set a local account's password. A temporary one (set by an admin or the installer) has to be replaced by
+    its owner at the next sign-in; one the owner chose themselves clears that."""
+    u.password_hash = hash_password(password)
+    st = db.get(PasswordState, u.id) if u.id else None
+    if st is None:
+        db.flush()
+        st = PasswordState(user_id=u.id)
+        db.add(st)
+    st.must_change = temporary
+    if not temporary:
+        st.changed_at = utcnow()
+
+
+def password_state(db: Session, u: User) -> tuple[bool, bool]:
+    """(must change it now, has ever chosen their own)."""
+    st = db.get(PasswordState, u.id)
+    return (bool(st and st.must_change), bool(st and st.changed_at))
 
 
 def require_admin(actor: Actor) -> None:
@@ -65,10 +85,12 @@ def create_user(db: Session, actor: Actor | None, *, username: str, email: str |
     if password is not None and len(password) < 12:
         raise BadRequest("Passwords need at least 12 characters")
     u = User(username=username, email=email, display_name=display_name or username,
-             password_hash=hash_password(password) if password else None,
              system_role=system_role, source=source, status=status, **extra)
     db.add(u)
     db.flush()
+    if password:
+        # Someone else picked it (an admin, or the installer for the first admin), so it is temporary.
+        set_password(db, u, password, temporary=True)
     provision_home(db, u)
     audit.log(db, actor, "user.create", username, role=system_role, source=source)
     return u
@@ -77,11 +99,13 @@ def create_user(db: Session, actor: Actor | None, *, username: str, email: str |
 def user_info(db: Session, u: User) -> dict[str, Any]:
     groups = list(db.scalars(select(Group.name).join(Membership, Membership.group_id == Group.id).where(Membership.user_id == u.id)))
     home = f"/users/{u.username}"
+    must, chose = password_state(db, u) if u.source == "local" else (False, False)
     return {"id": u.id, "username": u.username, "email": u.email, "display_name": u.display_name or u.username,
             "system_role": u.system_role, "status": u.status, "source": u.source, "groups": sorted(groups),
             "home": home, "used_bytes": fs.usage(db, home), "quota_bytes": fs.quota_for(db, home),
             "last_active": u.last_active.isoformat() + "Z" if u.last_active else None,
-            "has_password": bool(u.password_hash), "uid_number": u.uid_number}
+            "has_password": bool(u.password_hash), "uid_number": u.uid_number,
+            "must_change_password": must, "chose_password": chose}
 
 
 def update_user(db: Session, actor: Actor, user_id: int, **changes: Any) -> User:
@@ -116,7 +140,8 @@ def update_user(db: Session, actor: Actor, user_id: int, **changes: Any) -> User
     if changes.get("password"):
         if len(changes["password"]) < 12:
             raise BadRequest("Passwords need at least 12 characters")
-        u.password_hash = hash_password(changes["password"])
+        # An admin setting someone else's password hands them a temporary one; their own is theirs.
+        set_password(db, u, changes["password"], temporary=u.id != actor.user.id)
     if changes.get("display_name"):
         u.display_name = changes["display_name"][:256]
     audit.log(db, actor, "user.update", u.username, **{k: v for k, v in changes.items() if k != "password" and v is not None})

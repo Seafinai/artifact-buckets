@@ -108,7 +108,7 @@
             <button class="td" onclick={() => (pwOpen = true)}>
               <span class="ti"><Icon name="key" /></span>
               <span class="td-t"><b>Change the starting password</b><span>The one the installer printed. Only you should know it.</span></span>
-              <span class="td-go">Change</span>
+              {#if session.user.chose_password}<span class="td-go ok"><Icon name="check" size={14} />Done</span>{:else}<span class="td-go">Change</span>{/if}
             </button>
             <a class="td" href="/users">
               <span class="ti"><Icon name="users" /></span>
@@ -306,6 +306,7 @@
   .td-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); line-height: 1.45; }
   .td-t b { color: var(--text); font-weight: 500; font-size: 14px; }
   .td-go { flex: none; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .td-go.ok { color: var(--green); gap: 6px; }
   .eg { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-2); }
 
   .foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 16px 40px; border-top: 1px solid var(--line); background: var(--card-2); }
