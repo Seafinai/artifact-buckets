@@ -44,12 +44,12 @@
 <div class="page">
   <header class="page-head">
     {#if session.protected_storage}
-      <div><h1>Storage</h1><p class="sub">Disks, restore points and backups. Health checks, restore points and backups run on their own; this page is for when you want to look or change something.</p></div>
+      <div><h1>Storage</h1></div>
     {:else}
       {#if plain}
-      <div><h1>Storage</h1><p class="sub">Files are kept in plain folders on this server's disk, which the system and Docker share. Quotas below limit what each person and team folder can use.</p></div>
+      <div><h1>Storage</h1></div>
       {:else}
-      <div><h1>Storage</h1><p class="sub">Every volume mounted under the volumes folder joins one pool. People see one folder tree; files spread across the disks behind it. Add a disk any time; drain one to retire it.</p></div>
+      <div><h1>Storage</h1><p class="sub">Every volume under the volumes folder joins one pool. Add a disk any time; drain one to retire it.</p></div>
       <button class="btn" onclick={load}><Icon name="refresh" />Rescan mounts</button>
       {/if}
     {/if}
@@ -133,7 +133,7 @@
         <label class="lbl grow">Each person (GB)<input class="field" type="number" min="0.1" step="0.1" bind:value={qf.user_gb} disabled={!session.isAdmin} /></label>
         <label class="lbl grow">Each team folder (GB)<input class="field" type="number" min="0.1" step="0.1" bind:value={qf.group_gb} disabled={!session.isAdmin} /></label>
       </div>
-      <p class="note" style="margin:0">Change one person's quota on Users. Largest single file: {bytes(quotas?.max_file_bytes, 0)}. Older versions count too; when someone is near their limit, the oldest versions of the file they're saving make room first.</p>
+      <p class="note" style="margin:0">Set one person's own quota on Users. Older versions count; near the limit, the oldest versions of the file being saved make room first.</p>
       {#if session.isAdmin}<div><button class="btn pri">Save</button></div>{/if}
     </form>
   </section>

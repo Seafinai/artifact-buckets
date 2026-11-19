@@ -39,11 +39,13 @@
     try { testOut = await api.post('/api/routing/preview', test); } catch (e) { fail(e); }
   }
   const reason = (r) => r === 'project' ? 'your projects folder' : r === 'inbox' ? 'your inbox' : r === 'path' || r === 'folder' ? 'the folder asked for' : r?.startsWith('rule') ? `routing rule ${r.slice(5)}` : r;
+  // A Project column only when some save in view carries one.
+  const anyProject = $derived(!!data?.feed?.some((f) => f.detail?.project));
 </script>
 
 <div class="page">
   <header class="page-head">
-    <div><h1>Claude Code saves</h1><p class="sub">Everything Claude Code saved{session.isAuditor ? ' across the team' : ' for you'}, where it went and why. Updates every 15 seconds.</p></div>
+    <div><h1>Claude Code saves</h1><p class="sub">Live{session.isAuditor ? ' · everyone' : ''}</p></div>
     {#if session.isAdmin && data}
       <button class="btn" class:pri={data.paused} onclick={togglePause}><Icon name={data.paused ? 'play' : 'pause'} />{data.paused ? 'Resume saves' : 'Pause saves'}</button>
     {/if}
@@ -56,8 +58,7 @@
   {#if data}
     <section class="stats">
       <div class="card stat"><span class="muted">Saved, last 24 hours</span><span class="big" style="color:var(--amber)">{data.today.saved}</span><span class="note">{session.isAuditor ? 'by everyone' : 'by you'}</span></div>
-      <div class="card stat"><span class="muted">Refused, last 24 hours</span><span class="big" style:color={data.today.rejected ? 'var(--red)' : ''}>{data.today.rejected}</span><span class="note">No access, over quota, too large or paused</span></div>
-      <div class="card stat"><span class="muted">Largest file accepted</span><span class="big">{bytes(data.max_file_bytes, 0)}</span><span class="note">Per file. Larger ones are refused with a reason.</span></div>
+      <div class="card stat"><span class="muted">Refused, last 24 hours</span><span class="big" style:color={data.today.rejected ? 'var(--red)' : ''}>{data.today.rejected}</span><span class="note">{data.today.rejected ? 'No access, over quota, too large or paused' : `Files up to ${bytes(data.max_file_bytes, 0)}`}</span></div>
     </section>
   {/if}
 
@@ -103,7 +104,7 @@
     {:else if !data.feed.length}<div class="empty">Nothing yet. Once someone connects Claude Code and saves, it shows up here.</div>
     {:else}
       <div class="scroll-x"><table class="table">
-        <thead><tr><th>When</th><th>File</th><th>Folder</th>{#if session.isAuditor}<th>Person</th>{/if}<th>Project</th><th>Result</th></tr></thead>
+        <thead><tr><th>When</th><th>File</th><th>Folder</th>{#if session.isAuditor}<th>Person</th>{/if}{#if anyProject}<th>Project</th>{/if}<th>Result</th></tr></thead>
         <tbody>
           {#each data.feed as f}
             <tr>
@@ -111,8 +112,8 @@
               <td style="font-weight:500">{f.path.split('/').pop()}</td>
               <td class="mono note">{#if f.ok}<a href={`/files?path=${encodeURIComponent(f.path.split('/').slice(0, -1).join('/'))}&file=${encodeURIComponent(f.path)}`} style="color:var(--text-2)">{f.path.split('/').slice(0, -1).join('/')}</a>{:else}{f.path.split('/').slice(0, -1).join('/')}{/if}</td>
               {#if session.isAuditor}<td>{f.user}</td>{/if}
-              <td class="mono note">{f.detail?.project || '—'}</td>
-              <td>{#if f.ok}<span class="tag green">{f.detail?.unchanged ? 'Unchanged' : `Saved v${f.detail?.version ?? 1}`}</span>{:else}<span class="tag red">{f.detail?.reason || 'Refused'}</span>{/if}</td>
+              {#if anyProject}<td class="note">{f.detail?.project || ''}</td>{/if}
+              <td>{#if f.ok}<span class={f.detail?.unchanged ? 'tag' : 'tag green'}>{f.detail?.unchanged ? 'Unchanged' : `Saved v${f.detail?.version ?? 1}`}</span>{:else}<span class="tag red">{f.detail?.reason || 'Refused'}</span>{/if}</td>
             </tr>
           {/each}
         </tbody>

@@ -10,12 +10,12 @@
   let days = $state(14);
   let d = $state(null);
   let sel = $state(null);
-  $effect(() => { const n = days; sel = null; api.get('/api/overview', { days: n }).then((x) => (d = x)).catch(fail); });
+  $effect(() => { const n = days; sel = null; api.get('/api/overview', { days: n, tz: new Date().getTimezoneOffset() }).then((x) => (d = x)).catch(fail); });
 
   const series = $derived(d?.series || []);
-  const activeDays = $derived(series.filter((s) => s.mcp + s.other > 0).length);
   const max = $derived(Math.max(1, ...series.map((s) => s.mcp + s.other)));
-  const total = $derived(series.reduce((a, s) => a + s.mcp, 0));
+  const total = $derived(series.reduce((a, s) => a + s.mcp + s.other, 0));
+  const fromClaude = $derived(series.reduce((a, s) => a + s.mcp, 0));
   const pick = $derived(sel ?? series.length - 1);
   const label = (iso, long) => new Date(iso + 'T00:00:00').toLocaleDateString(undefined, long ? { weekday: 'short', day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short' });
   let narrow = $state(typeof matchMedia !== 'undefined' && matchMedia('(max-width: 600px)').matches);
@@ -31,6 +31,8 @@
   const COLORS = ['#F2A93B', '#8AA4FF', '#4CC38A', '#D59BE6', '#5CC8D0'];
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
   const nvol = $derived(d ? d.volumes.filter((v) => v.status === 'active').length : 0);
+  // The disk panel earns its place only for a pool of several disks; one plain disk is the Disk figure above.
+  const pooled = $derived(!!d && d.pool.mode !== 'direct' && d.volumes.length > 0);
 </script>
 
 <div class="page">
@@ -47,17 +49,17 @@
   </header>
 
   {#if !d}<div class="card empty">Loading…</div>{:else}
-  <section class="kpis">
-    <div class="card kpi"><span class="muted">People</span><span class="big">{d.people}</span><span class="note">active accounts</span></div>
-    <div class="card kpi"><span class="muted">Files stored</span><span class="big">{d.files.toLocaleString()}</span><span class="note">{d.folders_with_grants} folders with their own sharing</span></div>
-    <div class="card kpi"><span class="muted">Saved from Claude Code</span><span class="big" style="color:var(--amber)">{total.toLocaleString()}</span><span class="note">last {days} days</span></div>
-    <div class="card kpi"><span class="muted">{d.pool.mode === 'direct' ? 'Disk in use' : 'Pool capacity'}</span><span class="big">{d.pool.total_bytes ? Math.round((d.pool.used_bytes / d.pool.total_bytes) * 100) : 0}%</span><span class="note">{bytes(d.pool.used_bytes)} of {bytes(d.pool.total_bytes, 0)}{nvol ? ` on ${nvol} ${nvol === 1 ? 'disk' : 'disks'}` : ''}</span></div>
+  <section class="card kpis">
+    <a class="kpi" href="/users"><span class="k">People</span><span class="big">{d.people}</span></a>
+    <a class="kpi" href="/files"><span class="k">Files</span><span class="big">{d.files.toLocaleString()}</span></a>
+    <a class="kpi" href="/incoming"><span class="k">Saves, {days} days</span><span class="big">{total.toLocaleString()}</span><span class="note"><span class="dot" style="background:var(--amber)"></span>{fromClaude.toLocaleString()} from Claude Code</span></a>
+    <a class="kpi" href="/storage"><span class="k">{d.pool.mode === 'direct' ? 'Disk' : 'Pool'}</span><span class="big">{d.pool.total_bytes ? Math.round((d.pool.used_bytes / d.pool.total_bytes) * 100) : 0}<small>%</small></span><span class="note">{bytes(d.pool.used_bytes)} of {bytes(d.pool.total_bytes, 0)}{nvol ? ` on ${nvol} ${nvol === 1 ? 'disk' : 'disks'}` : ''}</span></a>
   </section>
 
   <section class="duo">
-    <div class="card chart">
+    <div class="card chart" class:solo={!pooled}>
       <div class="row" style="justify-content:space-between;align-items:flex-start;gap:16px">
-        <div style="display:flex;flex-direction:column;gap:4px"><h2>Files saved</h2><span class="note"><span class="dot" style="width:7px;height:7px;background:var(--amber)"></span> Claude Code &nbsp; <span class="dot" style="width:7px;height:7px;background:#3A3F48"></span> Browser and other</span></div>
+        <div style="display:flex;flex-direction:column;gap:4px"><h2>Saves per day</h2><span class="note"><span class="dot" style="width:7px;height:7px;background:var(--amber)"></span> Claude Code &nbsp; <span class="dot" style="width:7px;height:7px;background:#3A3F48"></span> Browser and other</span></div>
         {#if series[pick]}
           <div style="text-align:right;display:flex;flex-direction:column;gap:4px">
             <span class="mono" style="font-size:22px;font-weight:500">{series[pick].mcp + series[pick].other}</span>
@@ -65,12 +67,6 @@
           </div>
         {/if}
       </div>
-      {#if activeDays < 2}
-        <div class="plot-empty">
-          <span class="mono big">{series.reduce((a, s) => a + s.mcp + s.other, 0)}</span>
-          <span class="note">{activeDays === 0 ? 'No files saved in this period yet.' : `files saved so far, all on ${label(series.find((s) => s.mcp + s.other > 0).date, true)}.`}<br />The daily chart fills in once files arrive on more than one day.</span>
-        </div>
-      {:else}
       <div class="plot" style="gap:{days > 14 ? 4 : 10}px">
         <div class="gl" style="top:0"></div><div class="gl" style="top:50%"></div>
         {#each series as s, i}
@@ -85,9 +81,9 @@
       <div class="xl" style="gap:{days > 14 ? 4 : 10}px">
         {#each series as s, i}<span class="mono" style:color={i === pick ? 'var(--text)' : ''}>{showLabel(i) ? label(s.date) : ''}</span>{/each}
       </div>
-      {/if}
     </div>
 
+    {#if pooled}
     <div class="card side">
       <div class="row" style="justify-content:space-between"><h2>{d.pool.mode === 'direct' ? 'Server disk' : 'Storage pool'}</h2><a href="/storage" style="font-size:13px">Manage</a></div>
       <div class="row" style="align-items:baseline;gap:8px"><span style="font-size:28px;font-weight:600;letter-spacing:-0.03em">{bytes(d.pool.total_bytes - d.pool.used_bytes)}</span><span class="note">free of {bytes(d.pool.total_bytes, 0)}</span></div>
@@ -104,11 +100,10 @@
             <span class="grow" style="display:flex;flex-direction:column;gap:2px"><span style="font-size:13px;font-weight:500">{v.name}</span><span class="note">{v.label || ({ pending: 'Detected, not in pool', draining: 'Draining', drained: 'Drained, safe to remove', missing: 'Not mounted' })[v.status] || 'In pool'}</span></span>
             <span class="mono note" style="color:var(--text-2)">{d.pool.mode === 'direct' ? bytes(v.used_bytes) : `${bytes(v.used_bytes)} / ${bytes(v.total_bytes, 0)}`}</span>
           </div>
-        {:else}
-          <div class="note" style="padding:12px 0">{d.pool.mode === 'mergerfs' ? 'No volumes mounted yet.' : 'Files are kept in plain folders on this server.'}</div>
         {/each}
       </div>
     </div>
+    {/if}
   </section>
 
   <section class="duo">
@@ -119,33 +114,41 @@
         <div class="ev">
           <Avatar name={e.actor_name || e.actor} />
           <div class="grow" style="display:flex;flex-direction:column;gap:4px">
-            <span style="font-size:13px;line-height:1.5"><b>{e.actor_name || e.actor}</b> {verb} {#if obj}<span class="mono" style="color:var(--amber)">{obj}</span>{/if} {rest}</span>
+            <span style="font-size:13px;line-height:1.5"><b>{e.actor_name || e.actor}</b> {verb} {#if obj}<span class="obj">{obj}</span>{/if} {rest}</span>
             <span class="note">{e.detail?.token ? e.detail.token.replace(/ \(…\w+\)$/, '') : VIA[e.via] || e.via}{e.detail?.project ? ` · project ${e.detail.project}` : ''}</span>
           </div>
           <span class="note" style="white-space:nowrap">{ago(e.ts)}</span>
         </div>
       {:else}<div class="empty">No activity yet.</div>{/each}
     </div>
-    <div class="card side">
-      <h2>Needs attention</h2>
-      {#each d.attention as a}
-        <a class="att" href={a.link}>
-          <span class="dot" style="background:{({ volume: 'var(--blue)', tokens: 'var(--amber)', smb: 'var(--red)', directory: 'var(--violet)' })[a.kind]};margin-top:6px"></span>
-          <span style="font-size:13px;font-weight:500;line-height:1.5">{a.text}</span>
-        </a>
-      {:else}
-        <div class="calm"><Icon name="check" style="color:var(--green)" /><span>All clear. Storage, tokens{session.smb ? ', share permissions' : ''} and the directory look healthy.</span></div>
-      {/each}
-    </div>
+    {#if d.attention.length}
+      <div class="card side">
+        <h2>Needs attention</h2>
+        {#each d.attention as a}
+          <a class="att" href={a.link}>
+            <span class="dot" style="background:{({ volume: 'var(--blue)', tokens: 'var(--amber)', smb: 'var(--red)', directory: 'var(--violet)' })[a.kind]};margin-top:6px"></span>
+            <span style="font-size:13px;font-weight:500;line-height:1.5">{a.text}</span>
+          </a>
+        {/each}
+      </div>
+    {/if}
   </section>
   {/if}
 </div>
 
 <style>
-  .plot-empty { min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; border: 1px dashed var(--line, #2a2d33); border-radius: 10px; margin-top: 14px; }
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-  .kpi { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; font-size: 13px; }
-  .big { font-size: 34px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0; overflow: hidden; }
+  .kpi { padding: 20px 24px 22px; display: flex; flex-direction: column; gap: 10px; color: var(--text); border-left: 1px solid var(--line); transition: background .15s; }
+  .kpi:first-child { border-left: 0; }
+  .kpi:hover { background: var(--card-2); color: var(--text); }
+  .kpi .k { font-size: 13px; color: var(--muted); }
+  .kpi .note { display: flex; align-items: center; gap: 7px; }
+  .kpi .dot { width: 6px; height: 6px; }
+  .big { font-size: 34px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .big small { font-size: 20px; font-weight: 500; color: var(--muted); margin-left: 2px; letter-spacing: 0; }
+  @media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpi:nth-child(3) { border-left: 0; } .kpi:nth-child(n+3) { border-top: 1px solid var(--line); } }
+  .chart.solo { flex-basis: 100%; }
+  .obj { font-weight: 500; color: var(--text); }
   .duo { display: flex; flex-wrap: wrap; gap: 16px; }
   .chart { flex: 2 1 560px; min-width: 0; padding: 22px 24px 20px; display: flex; flex-direction: column; gap: 22px; }
   .plot { position: relative; height: 200px; display: flex; align-items: flex-end; border-bottom: 1px solid #25282D; }

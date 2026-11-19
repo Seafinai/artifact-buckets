@@ -55,7 +55,7 @@
 
 <div class="page">
   <header class="page-head">
-    <div><h1>{session.isAuditor ? 'Groups and access' : 'My groups'}</h1><p class="sub">Groups get roles on folders. A role applies to the folder and everything inside it, and the highest role a person has wins.</p></div>
+    <div><h1>{session.isAuditor ? 'Groups and access' : 'My groups'}</h1><p class="sub">A role covers the folder and everything inside it. The highest role a person has wins.</p></div>
     {#if session.isAdmin}<button class="btn pri" onclick={() => { form = { name: '', description: '' }; dialog = 'new'; }}><Icon name="plus" />New group</button>{/if}
   </header>
 
@@ -141,7 +141,7 @@
             {/each}
           </tbody>
         </table></div>
-        <p class="note" style="margin:0">Admins are Owner everywhere. Auditors read the audit log and these reports but can't open files. On the Windows share, Viewer is Read and Editor or Owner is Modify.</p>
+        <p class="note" style="margin:0">Admins are Owner everywhere. Auditors read the audit log, not files.{#if session.smb}{' '}On the Windows share, Viewer is Read and Editor or Owner is Modify.{/if}</p>
       </div>
 
       {#if session.isAuditor}
