@@ -56,7 +56,7 @@ ZFS_GROUP="$APP_SLUG-zfs"
 
 HOST="" EMAIL="" TLS="auto" CERT="" KEY="" HTTPS_PORT="" HTTP_PORT="" ZFS="" NO_ZFS="" IMAGE="" BUILD=""
 SOURCE="${AB_SOURCE:-}" CA_FILE="" YES="" PURGE="" HOST_GIVEN="" OLD_IMAGE_ID=""
-EXTRA_IPS="" PUB_HTTPS="" PUB_HTTP="" DOCKER_NEW="" KEPT_DATA="" CMD=""
+EXTRA_IPS="" PUB_HTTPS="" PUB_HTTP="" DOCKER_NEW="" KEPT_DATA=""
 
 if [ -t 1 ]; then B=$(printf '\033[1m'); D=$(printf '\033[2m'); R=$(printf '\033[0m'); else B="" D="" R=""; fi
 say()  { printf '%s\n' "$*"; }
@@ -226,8 +226,9 @@ fetch_source() {
   if [ -z "$SOURCE" ] && [ -n "$_here" ] && [ -f "$_here/deploy/install/compose.yml" ] && [ "$_here" != "$DIR/src" ]; then
     SOURCE=$_here
   fi
-  # upgrade keeps using a source given earlier; running the installer again starts from GitHub unless told otherwise.
-  [ -n "$SOURCE" ] || [ "$CMD" != upgrade ] || SOURCE=$(env_get AB_SOURCE)
+  # The installed command (upgrade, or install run again from it) keeps a source given earlier; the one-liner
+  # (curl | sh, where $0 has no slash) takes the code from GitHub unless --source says otherwise.
+  if [ -z "$SOURCE" ]; then case $0 in */*) SOURCE=$(env_get AB_SOURCE) ;; esac; fi
   [ -n "$SOURCE" ] || SOURCE="https://codeload.github.com/$REPO/tar.gz/$REF"
   step "Getting $APP_NAME from $SOURCE"
   _new="$DIR/src.new"
@@ -562,7 +563,7 @@ summary() {
   say "  Open        $BASE_URL"
   if [ -n "$KEPT_DATA" ]; then
     say "  Sign in     with the accounts you already had; files and settings were kept"
-    say "              (lost the admin password? sudo $APP_SLUG reset-password)"
+    say "              (first install? sudo $APP_SLUG password; lost it? sudo $APP_SLUG reset-password)"
   else
     say "  Sign in     admin / $_pw"
     say "              (also in $DIR/.env; change it after you sign in)"
@@ -754,7 +755,6 @@ main() {
     /bin|/boot|/dev|/etc|/home|/lib|/lib64|/media|/mnt|/opt|/proc|/root|/run|/sbin|/srv|/sys|/tmp|/usr|/usr/*|/var|/var/lib)
       die "--dir $DIR is a system folder; use a folder of its own, such as /opt/$APP_SLUG." ;;
   esac
-  CMD=$_cmd
   case $_cmd in
     install) cmd_install ;;
     upgrade) cmd_upgrade ;;
