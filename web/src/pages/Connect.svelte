@@ -44,47 +44,31 @@
 </script>
 
 <div class="page">
-  <header class="page-head">
-    <div><h1>Connect Claude Code</h1><p class="sub">Once connected, Claude Code saves what it makes straight into your folders, and can find, organize and share them for you.</p></div>
-  </header>
+  <header class="page-head"><h1>Connect Claude Code</h1></header>
 
-  <section class="steps">
-    <div class="card step">
-      <span class="num mono">1</span>
-      <h2>Ask Claude Code</h2>
-      <Copy text={setup.prompt} label="the prompt" />
-      <p class="note">Paste it into Claude Code on your computer. Claude checks each step, says what it’s doing and does it for you.</p>
-      <div class="or"><span>or run one line</span></div>
-      <div class="segs os" role="group" aria-label="Your computer">
-        <button class="seg" class:on={os === 'windows'} onclick={() => (os = 'windows')}>Windows</button>
-        <button class="seg" class:on={os === 'unix'} onclick={() => (os = 'unix')}>macOS and Linux</button>
+  <section class="card setup">
+    <div class="ways">
+      <div class="way">
+        <h2>Ask Claude Code</h2>
+        <Copy text={setup.prompt} label="the prompt" />
       </div>
-      <Copy text={os === 'windows' ? setup.windows : setup.unix} label="the setup command" />
-      <p class="note">In {os === 'windows' ? 'PowerShell' : 'a terminal'}. It asks nothing there, and running it again is safe.</p>
-      {#if setup.fingerprint}<p class="note fp">Both carry this server’s certificate fingerprint and check it before trusting anything. <span class="mono">SHA-256 {setup.fingerprint.match(/.{1,4}/g).join(' ')}</span></p>{/if}
-    </div>
-    <div class="card step">
-      <span class="num mono">2</span>
-      <h2>Press Connect once</h2>
-      <p class="note">A page opens here in your browser. Untick any folders of Claude’s existing work that should stay on your computer, then press <b>Connect</b>. That one press signs Claude Code in too.{#if setup.private_ca}{' '}This server uses its own certificate, so your browser may warn the first time.{/if}</p>
-      <div class="mock">
-        <span class="faint" style="font-size:11px;letter-spacing:.06em;text-transform:uppercase">Example</span>
-        <div class="mrow"><span class="mbox on"><Icon name="check" size={10} /></span><span class="mono">quarterly-report</span><span class="faint mono">14 files</span></div>
-        <div class="mrow"><span class="mbox on"><Icon name="check" size={10} /></span><span class="mono">onboarding-guide</span><span class="faint mono">6 files</span></div>
-        <div class="mrow off"><span class="mbox"></span><span class="mono">client-work</span><span class="faint mono">22 files</span></div>
-        <div class="mbtn">Connect and copy 20 files</div>
+      <div class="way">
+        <div class="row" style="justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <h2>Or run one line</h2>
+          <div class="segs" role="group" aria-label="Your computer">
+            <button class="seg" class:on={os === 'windows'} onclick={() => (os = 'windows')}>Windows</button>
+            <button class="seg" class:on={os === 'unix'} onclick={() => (os = 'unix')}>macOS and Linux</button>
+          </div>
+        </div>
+        <Copy text={os === 'windows' ? setup.windows : setup.unix} label="the setup command" />
       </div>
     </div>
-    <div class="card step">
-      <span class="num mono">3</span>
-      <h2>Work as usual</h2>
-      <p class="note">Files land in <span class="mono">projects/&lt;repo&gt;</span> under your home folder, or in a team folder when your team has a rule for that repository. Ask for anything:</p>
-      <ul class="eg">
-        <li>“Save this report to the platform team folder”</li>
-        <li>“Find the diagrams I made last week”</li>
-        <li>“Share the q3 folder with finance as viewers”</li>
-      </ul>
-    </div>
+    <ol class="flow">
+      <li><Icon name="terminal" size={15} /><span>Paste it {os === 'windows' ? 'into Claude Code or PowerShell' : 'into Claude Code or a terminal'}</span></li>
+      <li><Icon name="check" size={15} /><span>Press <b>Connect</b> on the page that opens here</span></li>
+      <li><Icon name="folder" size={15} /><span>Saves land in <span class="mono">{home}/projects</span></span></li>
+    </ol>
+    {#if setup.fingerprint}<p class="fp" title="The setup line checks the server's certificate against this before trusting it">Certificate SHA-256 <span class="mono">{setup.fingerprint.match(/.{1,4}/g).join(' ')}</span></p>{/if}
   </section>
 
   <details class="card alt" id="remove">
@@ -101,15 +85,13 @@
   </details>
 
   {#if session.isAdmin}
-    <section class="card rollout" id="rollout">
-      <div class="hd">
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <h2>Set up every computer at once</h2>
-          <span class="note">Push this policy with Intune, Group Policy or Jamf. Claude Code installs the plugin by itself at its next start, and people only sign in once when it asks.</span>
-        </div>
-        <a class="btn" href="/claude/managed-settings.json" download="managed-settings.json"><Icon name="download" />Download</a>
-      </div>
+    <details class="card alt rollout" id="rollout">
+      <summary>Set up every computer at once <span class="faint">Intune, Group Policy, Jamf</span></summary>
       <div class="ro-body">
+        <div class="row" style="justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <span class="note">Claude Code installs the plugin at its next start; people sign in once when it asks.</span>
+          <a class="btn sm" href="/claude/managed-settings.json" download="managed-settings.json"><Icon name="download" size={14} />Download</a>
+        </div>
         <pre class="mono policy">{JSON.stringify(setup.managed_settings, null, 2)}</pre>
         <dl class="where">
           <dt>Windows</dt><dd class="mono">C:\Program Files\ClaudeCode\managed-settings.json</dd>
@@ -117,9 +99,9 @@
           <dt>macOS</dt><dd class="mono">/Library/Application Support/ClaudeCode/managed-settings.json</dd>
           <dt>Linux</dt><dd class="mono">/etc/claude-code/managed-settings.json</dd>
         </dl>
-        {#if setup.private_ca}<p class="note" style="margin:0">Computers need to trust this server’s certificate first. Domain-joined PCs already trust a certificate from your own certificate authority.</p>{/if}
+        {#if setup.private_ca}<p class="note" style="margin:0">Computers must trust this server’s certificate first; domain-joined PCs already trust one from your own certificate authority.</p>{/if}
       </div>
-    </section>
+    </details>
   {/if}
 
   <details class="card alt">
@@ -142,7 +124,7 @@
       </span>
     </div>
     {#if !tokens}<div class="empty">Loading…</div>
-    {:else if !devices.length}<div class="empty">No computers yet. Follow the steps above and this list fills in.</div>
+    {:else if !devices.length}<div class="empty">None yet.</div>
     {:else}
       {#each devices as d}
         <div class="dev">
@@ -159,14 +141,11 @@
 
   <section class="card" id="sync">
     <div class="hd">
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <h2>{everyone ? 'Everyone’s computers that sync' : 'Computers that sync'}</h2>
-        <span class="note">They copy the files Claude Code makes into {everyone ? 'each person’s' : 'your'} <span class="mono">projects</span> and <span class="mono">inbox</span>, after each reply. They can only add files.</span>
-      </div>
+      <h2>{everyone ? 'Everyone’s computers that sync' : 'Computers that sync'}</h2>
       {#if !everyone && sync?.files}<a class="btn" href={`/files?path=${encodeURIComponent(home + '/projects')}`}><Icon name="folder" />{sync.files} synced {sync.files === 1 ? 'file' : 'files'}</a>{/if}
     </div>
     {#if !tokens}<div class="empty">Loading…</div>
-    {:else if !syncers.length}<div class="empty">None yet. The setup line above offers to bring in what Claude has already made on a computer, and keeps it in sync.</div>
+    {:else if !syncers.length}<div class="empty">None yet.</div>
     {:else}
       {#each syncers as d}
         <div class="dev">
@@ -183,7 +162,7 @@
 
   <section class="card">
     <div class="hd">
-      <div style="display:flex;flex-direction:column;gap:4px"><h2>Personal tokens</h2><span class="note">For build servers and scripts that can't open a browser. Admin tools never work with these.</span></div>
+      <div style="display:flex;flex-direction:column;gap:4px"><h2>Personal tokens</h2><span class="note">For build servers and scripts that can't open a browser</span></div>
       <button class="btn" onclick={() => { form = { name: '', scope: 'write', folders: '', days: 30 }; dialog = 'new'; }}><Icon name="key" />New token</button>
     </div>
     {#if personal.length}
@@ -235,12 +214,21 @@
 {/if}
 
 <style>
-  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-  .step { padding: 22px; display: flex; flex-direction: column; gap: 12px; position: relative; }
-  .step p { margin: 0; }
-  .num { width: 26px; height: 26px; border-radius: 8px; background: var(--amber-bg); color: var(--amber); display: grid; place-items: center; font-size: 12px; font-weight: 500; }
-  .mock { padding: 12px 14px; border-radius: 10px; background: #0F1012; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
-  .eg { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-2); }
+  .setup { padding: 0; overflow: hidden; }
+  .ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .way { padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .way > h2, .way > .row { min-height: 34px; display: flex; align-items: center; }
+  .card > .empty { padding: 26px 22px; }
+  .way + .way { border-left: 1px solid var(--line); }
+  @media (max-width: 760px) { .way + .way { border-left: 0; border-top: 1px solid var(--line); } }
+  .flow { list-style: none; margin: 0; padding: 14px 24px; display: flex; flex-wrap: wrap; gap: 10px 28px; border-top: 1px solid var(--line); background: var(--bg-side); font-size: 13px; color: var(--text-2); }
+  .flow li { display: flex; align-items: center; gap: 9px; }
+  .flow :global(.ic) { color: var(--amber); }
+  .flow b { color: var(--text); font-weight: 500; }
+  .fp { margin: 0; padding: 0 24px 14px; background: var(--bg-side); font-size: 11.5px; color: var(--faint); }
+  .fp .mono { letter-spacing: .02em; overflow-wrap: anywhere; }
+  .rollout summary .faint { font-weight: 400; margin-left: 8px; color: var(--faint); }
+  .ro-body { padding-top: 16px; display: flex; flex-direction: column; gap: 16px; }
   .alt { padding: 16px 22px; }
   .alt summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-2); }
   .hd { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 22px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
@@ -248,19 +236,9 @@
   .dev:last-child { border-bottom: 0; }
   .dvi { width: 34px; height: 34px; border-radius: 9px; background: var(--raise); color: var(--text-2); display: grid; place-items: center; }
   .warn { color: var(--amber); }
-  .os { align-self: flex-start; }
   .rm { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
   .rm p { margin: 0; }
   .rm .mono { overflow-wrap: anywhere; font-size: 12px; }
-  .fp .mono { display: block; margin-top: 4px; font-size: 11px; color: var(--faint); overflow-wrap: anywhere; letter-spacing: .02em; }
-  .mrow { display: grid; grid-template-columns: 14px 1fr auto; gap: 9px; align-items: center; font-size: 12px; }
-  .mrow.off .mono:not(.faint) { color: var(--faint); text-decoration: line-through; }
-  .mbox { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--line-hover); display: grid; place-items: center; }
-  .mbox.on { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
-  .mbtn { margin-top: 4px; align-self: flex-end; font-size: 11.5px; font-weight: 500; padding: 5px 10px; border-radius: 7px; background: var(--amber); color: var(--amber-ink); }
-  .or { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12px; margin-top: 4px; }
-  .or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
-  .rollout .ro-body { padding: 18px 22px 20px; display: flex; flex-direction: column; gap: 16px; }
   .policy { margin: 0; padding: 14px 16px; border-radius: 10px; background: #0F1012; border: 1px solid var(--line); font-size: 12.5px; line-height: 1.55; color: var(--text); overflow-x: auto; }
   .where { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 0; font-size: 13px; }
   .where dt { color: var(--text-2); }

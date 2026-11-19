@@ -75,6 +75,8 @@
   const numCols = $derived(table ? (table[0] || []).map((_, j) => table.slice(1).every((r) => r[j] === undefined || r[j] === '' || /^-?[\d.,]+%?$/.test(r[j].trim()))) : []);
   const tint = $derived(f ? extTint(f.name) : ['', '']);
   const src = $derived(f ? (SOURCE[f.source] || [f.source, '#9097A0']) : ['', '']);
+  // "synced" only repeats From: Auto-sync.
+  const tags = $derived((f?.tags || []).filter((t) => !(t === 'synced' && f.source === 'sync')));
 
 
   async function rename(name) {
@@ -129,7 +131,7 @@
             <button class="seg" class:on={mode === 'source'} onclick={() => (mode = 'source')}>Source</button>
           </div>
         {/if}
-        {#if ['html', 'svg', 'pdf', 'image'].includes(k)}<a class="btn" data-native href={f.preview_url} target="_blank" rel="noopener"><Icon name="external" />Open in new tab</a>{/if}
+        {#if ['html', 'svg', 'pdf', 'image'].includes(k)}<a class="btn icon" data-native href={f.preview_url} target="_blank" rel="noopener" aria-label="Open in a new tab" title="Open in a new tab"><Icon name="external" /></a>{/if}
         <button class="btn" onclick={toClaude} title="Copies a command that pulls this file into Claude Code"><Icon name="terminal" />Open in Claude Code</button>
         <button class="btn" onclick={() => (dialog = { kind: 'share' })}><Icon name="users" />{canShare ? 'Share' : 'Who has access'}</button>
         <a class="btn pri" data-native href={api.download(f.path)} download><Icon name="download" />Download</a>
@@ -169,14 +171,14 @@
       </section>
 
       <aside class="card rail" aria-label="About this file">
-        <div class="kv"><span>Size</span><span class="mono">{bytes(f.size)}</span></div>
+        <div class="kv"><span>Size</span><span class="mono" title={`SHA-256 ${f.sha256}`}>{bytes(f.size)}</span></div>
         <div class="kv"><span>Saved</span><span>{when(f.updated_at)}</span></div>
         <div class="kv"><span>Saved by</span><span>{f.saved_by || '—'}</span></div>
         <div class="kv"><span>From</span><span class="row" style="gap:8px"><span class="dot" style="width:6px;height:6px;background:{src[1]}"></span>{src[0]}</span></div>
         {#if f.project}<div class="kv"><span>Project</span><span class="mono">{f.project}</span></div>{/if}
         {#if f.git_remote}<div class="kv"><span>Repository</span><span class="mono brk">{f.git_remote}</span></div>{/if}
         {#if f.git_commit}<div class="kv"><span>Commit</span><span class="mono">{f.git_commit.slice(0, 10)}</span></div>{/if}
-        {#if f.tags?.length}<div class="kv"><span>Tags</span><span class="tagrow">{#each f.tags as tg}<span class="tag">{tg}</span>{/each}</span></div>{/if}
+        {#if tags.length}<div class="kv"><span>Tags</span><span class="tagrow">{#each tags as tg}<span class="tag">{tg}</span>{/each}</span></div>{/if}
         <div class="kv"><span>Folder</span><a class="brk" href={`/files?path=${encodeURIComponent(folder)}`}>{#each trail as c, i}{#if i} / <wbr />{/if}<span class="crumb">{c.name}</span>{/each}</a></div>
 
         <div class="vers">
@@ -203,7 +205,6 @@
             <button class="btn sm danger" onclick={() => (dialog = { kind: 'delete' })}><Icon name="trash" size={14} />Delete</button>
           </div>
         {/if}
-        <div class="kv" style="border:0"><span>SHA-256</span><span class="mono brk" style="color:var(--faint);font-size:11px">{f.sha256}</span></div>
       </aside>
     </div>
   {/if}
@@ -243,7 +244,7 @@
 <style>
   .viewer { gap: 18px; }
   .vhead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  .vtitle { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .vtitle { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .trail { display: flex; align-items: center; gap: 6px; font-size: 12.5px; flex-wrap: wrap; }
   .trail a { color: var(--muted); }
   .trail a:hover { color: var(--text); }

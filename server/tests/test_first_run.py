@@ -38,3 +38,13 @@ def test_mixed_case_names_are_accepted(admin):
     r = admin.post("/api/groups", json={"name": "Finance", "description": ""})
     assert r.status_code in (200, 201), r.text
     assert r.json()["folder"] == "/shared/finance"
+
+
+def test_overview_days_follow_the_viewers_time_zone(admin):
+    import datetime as dt
+    utc = admin.get("/api/overview", params={"days": 3}).json()["series"]
+    # 14 hours ahead of UTC (getTimezoneOffset -840): its "today" is never earlier than UTC's.
+    east = admin.get("/api/overview", params={"days": 3, "tz": -840}).json()["series"]
+    assert len(utc) == len(east) == 3
+    assert east[-1]["date"] >= utc[-1]["date"]
+    assert dt.date.fromisoformat(east[-1]["date"]) - dt.date.fromisoformat(east[0]["date"]) == dt.timedelta(days=2)

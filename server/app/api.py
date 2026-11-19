@@ -758,16 +758,20 @@ def smb_reconcile(actor: Actor = Depends(current), db: Session = Depends(get_db)
 # ---- overview and audit -------------------------------------------------------------------
 
 @router.get("/overview")
-def overview(actor: Actor = Depends(current), db: Session = Depends(get_db), days: int = Query(14, ge=1, le=90)):
+def overview(actor: Actor = Depends(current), db: Session = Depends(get_db), days: int = Query(14, ge=1, le=90),
+             tz: int = Query(0, ge=-840, le=840)):
+    """`tz` is the browser's getTimezoneOffset() in minutes, so days start at the viewer's midnight, not UTC's."""
     accounts.require_auditor(actor)
     now = utcnow()
-    start = (now - dt.timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    off = dt.timedelta(minutes=tz)
+    start_local = (now - off - dt.timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = start_local + off
     saves = db.execute(select(Audit.ts, Audit.via).where(Audit.action == "file.save", Audit.ok.is_(True), Audit.ts >= start)).all()
     series = []
     for i in range(days):
         d0 = start + dt.timedelta(days=i)
         d1 = d0 + dt.timedelta(days=1)
-        series.append({"date": d0.date().isoformat(),
+        series.append({"date": (start_local + dt.timedelta(days=i)).date().isoformat(),
                        "mcp": sum(1 for t, v in saves if d0 <= t < d1 and v == "mcp"),
                        "other": sum(1 for t, v in saves if d0 <= t < d1 and v != "mcp")})
     pool = storage.pool_info(db)

@@ -90,7 +90,6 @@
       {#key step}
       <div class="body">
         {#if cur === 'hello'}
-          <p class="eyebrow">Hello, {first}</p>
           <h1>Everything Claude makes, kept in one place.</h1>
           <p class="lede">Reports, diagrams, scripts and notes from Claude Code land in your folders here, filed by project. You can find them, open them in the browser, and share them with your team.</p>
           <div class="trio">
@@ -98,10 +97,9 @@
             <div class="tri"><span class="ti"><Icon name="terminal" /></span><b>Claude Code</b><span>saves here directly, once connected</span></div>
             <div class="tri"><span class="ti"><Icon name="share" /></span><b>Your team</b><span>sees what you choose to share</span></div>
           </div>
-          <p class="note">This takes about two minutes. You can skip any step and come back from <b>Getting started</b> in your account menu.</p>
+          <p class="note">You can come back to this from <b>Getting started</b> in your account menu.</p>
 
         {:else if cur === 'team'}
-          <p class="eyebrow">Step {n} of {STEPS.length} · for admins</p>
           <h1>Set up your team</h1>
           <p class="lede">You’re the first admin. A few things to do before inviting people. Each opens in its own page; come back here from <b>Getting started</b> in your account menu.</p>
           <div class="todo">
@@ -133,7 +131,6 @@
           </div>
 
         {:else if cur === 'connect'}
-          <p class="eyebrow">Step {n} of {STEPS.length}</p>
           <h1>Connect Claude Code</h1>
           <p class="lede">Paste this into Claude Code on your computer. It sets everything up, then opens one page here where you choose which of Claude’s existing files to bring in and press <b>Connect</b>. That’s the only click.</p>
           <Copy text={setup.prompt} label="the prompt" />
@@ -154,7 +151,6 @@
           </div>
 
         {:else if cur === 'work'}
-          <p class="eyebrow">Step {n} of {STEPS.length}</p>
           <h1>Bring in what Claude already made</h1>
           <p class="lede">Claude Code remembers the files it created and edited on your computer. Setup looks through that history and shows you, folder by folder, what it found; only the folders you keep ticked are copied. After that, new files arrive by themselves after each reply.</p>
           <ul class="rules">
@@ -185,7 +181,6 @@
           </div>
 
         {:else}
-          <p class="eyebrow">Step {n} of {STEPS.length}</p>
           <h1>Where things land</h1>
           <p class="lede">Each Claude Code project gets its own folder, named after its repository or the folder you ran Claude in. Anything made outside a project goes to your inbox.</p>
           <div class="tree mono">
@@ -246,7 +241,6 @@
   .panel { padding: 0; display: flex; flex-direction: column; min-height: 520px; overflow: hidden; }
   .body { padding: 36px 40px 28px; display: flex; flex-direction: column; gap: 18px; flex: 1; animation: rise .28s ease-out; }
   @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  .eyebrow { margin: 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--amber); font-weight: 500; }
   h1 { margin: -6px 0 0; font-size: 28px; line-height: 1.2; letter-spacing: -0.02em; max-width: 20ch; }
   .lede { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--text-2); max-width: 58ch; }
   .note { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }

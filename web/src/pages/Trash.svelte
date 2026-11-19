@@ -16,7 +16,7 @@
 
 <div class="page">
   <header class="page-head">
-    <div><h1>Trash</h1><p class="sub">Deleted files and folders stay here for {session.trash_days || 30} days with their versions and sharing. {session.isAdmin ? 'As an admin you see everyone’s.' : ''}</p></div>
+    <div><h1>Trash</h1><p class="sub">Kept {session.trash_days || 30} days with their versions and sharing{session.isAdmin ? ' · everyone’s' : ''}</p></div>
     <a class="btn" href="/files"><Icon name="chevL" />Back to files</a>
   </header>
   <section class="card">

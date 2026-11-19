@@ -18,7 +18,7 @@
 
 <div class="page">
   <header class="page-head">
-    <div><h1>Audit log</h1><p class="sub">Every sign-in, save, open, move, delete, share and admin change, with who did it, from where and through which door. Entries can't be edited.</p></div>
+    <div><h1>Audit log</h1><p class="sub">Every sign-in, save, open, move, delete, share and admin change. Entries can't be edited.</p></div>
     {#if events?.length}<a class="btn" data-native href={exportUrl} download title="Every matching entry, not only the ones shown"><Icon name="download" />Export CSV</a>{/if}
   </header>
 

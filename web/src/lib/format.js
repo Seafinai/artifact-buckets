@@ -57,7 +57,7 @@ const EXT_TINT = { html: ['#2A2214', '#F2A93B'], htm: ['#2A2214', '#F2A93B'], md
   py: ['#16282B', '#5CC8D0'], js: ['#2A2214', '#F2A93B'], ts: ['#1F2235', '#8AA4FF'], sql: ['#16282B', '#5CC8D0'] };
 export function extTint(name) { return EXT_TINT[ext(name)] || ['#1C1E22', '#C4C8CE']; }
 
-export const SOURCE = { mcp: ['Claude Code', '#F2A93B'], web: ['Upload', '#8AA4FF'], api: ['API', '#5CC8D0'], smb: ['Windows share', '#D59BE6'] };
+export const SOURCE = { mcp: ['Claude Code', '#F2A93B'], sync: ['Auto-sync', '#F2A93B'], web: ['Upload', '#8AA4FF'], api: ['API', '#5CC8D0'], smb: ['Windows share', '#D59BE6'] };
 
 export function crumbs(path) {
   const parts = path.split('/').filter(Boolean);
