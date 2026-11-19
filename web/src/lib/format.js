@@ -87,3 +87,9 @@ export function prettyJson(t) {
   }
   return out;
 }
+
+// Names that become folders (usernames, group names): lower case, spaces to dashes, nothing else odd.
+// Applied as people type, so "Finance Team" simply becomes finance-team. Usernames may also use a dot.
+export function slug(s, dots = false) {
+  return s.toLowerCase().replace(/\s+/g, '-').replace(dots ? /[^a-z0-9._-]/g : /[^a-z0-9_-]/g, '').replace(/^[^a-z0-9]+/, '').slice(0, 64);
+}

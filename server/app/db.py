@@ -37,6 +37,16 @@ class User(Base):
     last_active: Mapped[dt.datetime | None] = mapped_column(DateTime)
 
 
+class PasswordState(Base):
+    """A local account's password: whether it is a temporary one (set by an admin or the installer) that its
+    owner must replace at the next sign-in, and when its owner last chose one. Its own table, so existing
+    databases pick it up at startup without a migration."""
+    __tablename__ = "password_state"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    must_change: Mapped[bool] = mapped_column(Boolean, default=False)
+    changed_at: Mapped[dt.datetime | None] = mapped_column(DateTime)
+
+
 class Group(Base):
     __tablename__ = "groups"
     id: Mapped[int] = mapped_column(primary_key=True)

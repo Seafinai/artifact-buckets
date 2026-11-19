@@ -18,7 +18,7 @@ from .db import Audit, File, Folder, Grant, Group, Membership, RoutingRule, Toke
 from .errors import BadRequest, Forbidden, NotFound, TooManyAttempts, Unauthorized
 from .oauth import set_session_cookie
 from .perms import Actor, role_for
-from .security import hash_password, SESSION_COOKIE, consteq, create_web_session, end_web_session, issue_token, load_web_session, \
+from .security import SESSION_COOKIE, consteq, create_web_session, end_web_session, issue_token, load_web_session, \
     resolve_token, sign, unsign, verify_password, burn_password_check, login_throttle
 
 router = APIRouter(prefix="/api")
@@ -133,7 +133,7 @@ def change_password(body: PasswordBody, request: Request, actor: Actor = Depends
         raise BadRequest("Use at least 12 characters")
     if body.new == body.current:
         raise BadRequest("Choose a password different from the current one")
-    u.password_hash = hash_password(body.new)
+    accounts.set_password(db, u, body.new, temporary=False)
     audit.log(db, actor, "user.password", u.username)
     db.commit()
     return {"ok": True}
@@ -145,7 +145,7 @@ def me(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
     s = config.settings
     info = {"oidc": s.oidc_enabled, "smb": s.smb_enabled, "smb_host": s.smb_host, "base_url": s.base_url,
             "claude": claude_dist.setup_info(), "trash_days": s.trash_days, "max_file_bytes": s.max_file_bytes,
-            "storage_mode": s.storage_mode, "protected_storage": zfs.available()}
+            "storage_mode": s.storage_mode, "protected_storage": zfs.available(), "directory": s.ldap_enabled}
     if sess is None:
         return {"user": None, **info}
     u = db.get(User, sess.user_id)

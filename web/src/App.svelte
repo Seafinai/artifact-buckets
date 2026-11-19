@@ -102,7 +102,8 @@
 </script>
 
 <Toasts />
-{#if pwOpen && session.user}<ChangePassword onclose={() => (pwOpen = false)} />{/if}
+{#if session.user?.must_change_password}<ChangePassword required />
+{:else if pwOpen && session.user}<ChangePassword onclose={() => (pwOpen = false)} />{/if}
 
 {#if !session.loaded}
   <div class="boot"><Logo size={28} /></div>

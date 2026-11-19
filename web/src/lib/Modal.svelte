@@ -15,7 +15,7 @@
   <div class="dlg card" role="dialog" aria-modal="true" aria-label={title} bind:this={box} style="max-width:{width}px">
     <div class="hd">
       <h2>{title}</h2>
-      <button class="btn icon sm" aria-label="Close" onclick={() => onclose?.()}><Icon name="x" /></button>
+      {#if onclose}<button class="btn icon sm" aria-label="Close" onclick={() => onclose()}><Icon name="x" /></button>{/if}
     </div>
     <div class="bd">{@render children()}</div>
     {#if footer}<div class="ft">{@render footer()}</div>{/if}
