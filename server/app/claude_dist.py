@@ -271,7 +271,7 @@ claude plugin install {PLUGIN}@{MARKETPLACE}
 
 If the marketplace is already there, run `claude plugin marketplace update {MARKETPLACE}` instead of adding it.
 The plugin has an MCP server entry pointing at {base}/mcp, two skills (`buckets`, `buckets-admin`), two
-commands (`/buckets-setup`, `/buckets-open`) and one background hook. The hook runs the plugin's sync script
+commands (`/artifact-buckets:buckets-setup`, `/artifact-buckets:buckets-open`) and one background hook. The hook runs the plugin's sync script
 (`sync/sync.sh` or `sync/sync.ps1`) when a session starts and after each reply; until this computer is
 connected with syncing on, it exits straight away and does nothing.
 
@@ -533,10 +533,11 @@ else {
     try { Start-Process -FilePath $exe -ArgumentList $argv -Wait -ErrorAction Stop } catch { }
   }
   $signed = (claude mcp list 2>&1 | Out-String) -match ([regex]::Escape('{{MCP_NAME}}') + '[^\r\n]*Connected')
-  if (-not $signed) { Stop-Setup "Sign-in didn't finish. In Claude Code, run /mcp, choose artifact-buckets, then Authenticate."; return }
-  Step "Signed in"
+  if ($signed) { Step "Signed in" }
+  # The link is made either way, so the first copy runs even when the sign-in still needs finishing.
   $conf = Join-Path $dir 'sync.conf'
   if ((Test-Path $conf) -and ((Get-Content -Raw $conf) -match '(?m)^mode=sync')) { Write-Host ""; Sync-Do run }
+  if (-not $signed) { Stop-Setup "Sign-in didn't finish. Open a new terminal, start Claude Code, run /mcp, choose artifact-buckets, then Authenticate."; return }
 }
 
 Write-Host ""
@@ -561,16 +562,29 @@ connected() { claude mcp list 2>/dev/null | grep -F '{{MCP_NAME}}' | grep -q Con
 
 # Claude Code's sign-in only finishes in a terminal. Use this one when there is one (curl | sh from a
 # terminal); otherwise (say, when Claude Code itself runs this) give it a pseudo-terminal of its own.
+# Without a terminal the sign-in can only finish through a browser on this computer. With no desktop to open one
+# (an SSH session, a server), don't wait on it: say how to finish instead. Either way, give up after three minutes.
 signin() {
   if (: </dev/tty) 2>/dev/null; then   # in a subshell: a failed redirect would end this script
     claude mcp login '{{MCP_NAME}}' </dev/tty >/dev/tty 2>&1
   elif [ "$(uname)" = Darwin ]; then
-    script -q /dev/null claude mcp login '{{MCP_NAME}}' </dev/null >/dev/null 2>&1
+    script -q /dev/null claude mcp login '{{MCP_NAME}}' </dev/null >/dev/null 2>&1 &
+    waitfor $!
+  elif [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}${BROWSER:-}" ]; then
+    return 1
   elif command -v script >/dev/null 2>&1; then
-    script -qec "claude mcp login '{{MCP_NAME}}'" /dev/null </dev/null >/dev/null 2>&1
+    script -qec "claude mcp login '{{MCP_NAME}}'" /dev/null </dev/null >/dev/null 2>&1 &
+    waitfor $!
   else
     return 1
   fi
+}
+waitfor() { # waitfor PID: up to 180 s, then stop it
+  _i=0
+  while kill -0 "$1" 2>/dev/null; do
+    _i=$((_i + 1)); [ $_i -le 180 ] || { kill "$1" 2>/dev/null; pkill -P "$1" 2>/dev/null; return 1; }
+    sleep 1
+  done
 }
 
 printf '\n  Artifact Buckets\n  Connecting Claude Code to %s\n\n' "$SERVER"
@@ -625,9 +639,10 @@ else
   # The page just approved this computer, so Claude Code's sign-in goes through without another click.
   say "Finishing sign-in..."
   signin || true   # its exit code isn't reliable (130 after a good sign-in), so ask Claude Code instead
-  connected || quit "Sign-in didn't finish. In Claude Code, run /mcp, choose artifact-buckets, then Authenticate."
-  say "Signed in"
+  if connected; then say "Signed in"; fi
+  # The link is made either way, so the first copy runs even when the sign-in still needs finishing.
   if grep -qs '^mode=sync' "$dir/sync.conf"; then printf '\n'; sh "$sync" run || true; fi
+  connected || quit "Sign-in didn't finish. Open a new terminal, start Claude Code, run /mcp, choose artifact-buckets, then Authenticate."
 fi
 
 printf '\n  Done. Claude Code can now save to Artifact Buckets.\n  Open a new terminal, start Claude Code and try: save this to my buckets\n'

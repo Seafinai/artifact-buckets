@@ -95,7 +95,7 @@
     } catch (e) { fail(e); }
   }
   async function toClaude() {
-    const cmd = `/buckets-open ${path}`;
+    const cmd = `/artifact-buckets:buckets-open ${path}`;
     try { await navigator.clipboard.writeText(cmd); toast('Copied. Paste it into Claude Code to pull this file in and edit it.'); }
     catch { dialog = { kind: 'claude', cmd }; }
   }

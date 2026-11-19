@@ -24,7 +24,7 @@ across laptops. Artifact Buckets gives every person and team one place for it: C
 
 - **Claude Code built in.** A plugin, served by your own server, adds the connection and two skills. People sign in
   once in the browser. Saves land in the person's project folder, or a team folder when a routing rule says so.
-  `/buckets-open` pulls a file back into Claude Code to keep working on it.
+  `/artifact-buckets:buckets-open` pulls a file back into Claude Code to keep working on it.
 - **Auto-sync.** Optionally copies the files Claude Code already made on a computer into the person's folders.
 - **Folders and permissions.** A home folder per person and a folder per team, with Viewer / Editor / Owner roles
   that apply to everything below. Share a folder with a person or a group.
