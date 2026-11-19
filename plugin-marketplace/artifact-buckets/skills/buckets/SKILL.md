@@ -37,7 +37,7 @@ If a save is refused, say why in plain words and what to do:
 
 ## Working on a file that lives in buckets
 
-When the person wants to edit or look closely at a file from buckets ("open the latency dashboard", "fix the typo in our runbook"), follow `/buckets-open`: fetch it with `get_artifact`, write it to `.buckets/<name>` in the workspace, work on that copy with the normal tools, and save back to the same `path` with `if_version` set to the version you opened. If the save is refused because someone changed, moved or deleted it meanwhile, say so and offer to reapply or save under a new name rather than overwriting. Never save back text that `get_artifact` marked `truncated`. For a one-line text change, `edit_file` is quicker.
+When the person wants to edit or look closely at a file from buckets ("open the latency dashboard", "fix the typo in our runbook"), follow `/artifact-buckets:buckets-open`: fetch it with `get_artifact`, write it to `.buckets/<name>` in the workspace, work on that copy with the normal tools, and save back to the same `path` with `if_version` set to the version you opened. If the save is refused because someone changed, moved or deleted it meanwhile, say so and offer to reapply or save under a new name rather than overwriting. Never save back text that `get_artifact` marked `truncated`. For a one-line text change, `edit_file` is quicker.
 
 ## Organizing
 

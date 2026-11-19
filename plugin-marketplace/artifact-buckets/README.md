@@ -14,4 +14,4 @@ This folder is the source the server packages. To try it against a local develop
 - Skill `buckets`: saving, finding, organizing and sharing files.
 - Skill `buckets-admin`: admin and audit tasks (only works for admins and auditors).
 - Command `/buckets-setup`: connect and check.
-- Command `/buckets-open <path or words>`: pull a file into this session (`.buckets/<name>`), work on it with Claude's usual tools, and save it back as a new version. A save is refused if someone else changed the file meanwhile, so nobody's edit is lost.
+- Command `/artifact-buckets:buckets-open <path or words>`: pull a file into this session (`.buckets/<name>`), work on it with Claude's usual tools, and save it back as a new version. A save is refused if someone else changed the file meanwhile, so nobody's edit is lost.
