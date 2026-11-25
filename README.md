@@ -25,6 +25,8 @@ across laptops. Artifact Buckets gives every person and team one place for it: C
 - **Claude Code built in.** A plugin, served by your own server, adds the connection and two skills. People sign in
   once in the browser. Saves land in the person's project folder, or a team folder when a routing rule says so.
   `/artifact-buckets:buckets-open` pulls a file back into Claude Code to keep working on it.
+- **Claude's apps too.** Add it as a custom connector in Claude on the web, desktop or mobile, and Claude saves
+  into the same folders from any chat. It needs a public address; a Cloudflare Tunnel gives it one with one command.
 - **Auto-sync.** Optionally copies the files Claude Code already made on a computer into the person's folders.
 - **Folders and permissions.** A home folder per person and a folder per team, with Viewer / Editor / Owner roles
   that apply to everything below. Share a folder with a person or a group.
@@ -101,7 +103,7 @@ sudo artifact-buckets uninstall --purge   # remove it and delete all its data
 
 ## Connect Claude Code
 
-Open **Connect Claude Code** in the web app and paste the line it shows. It installs the plugin, then opens the
+Open **Connect Claude** in the web app and paste the line it shows. It installs the plugin, then opens the
 browser to sign in once:
 
 ```bash
@@ -112,6 +114,19 @@ curl -fsSL https://files.example.com/claude/install.sh | sh    # macOS and Linux
 Or just ask Claude Code: *"Set up Artifact Buckets on this computer by following
 https://files.example.com/claude/setup.md"*. To roll it out to every computer at once, push
 `/claude/managed-settings.json` as Claude Code's managed settings (Intune, Group Policy, Jamf).
+
+## Connect Claude on the web, desktop and mobile
+
+Claude's apps reach connectors from the internet, so the server needs a public `https` address first. With a
+[Cloudflare Tunnel](docs/public-https.md) that takes no open ports:
+
+```bash
+sudo artifact-buckets tunnel --host files.example.com     # paste the tunnel's token when asked
+```
+
+Then in Claude, open **Settings**, then **Connectors**, choose **Add custom connector** and paste
+`https://files.example.com/mcp`. **Connect Claude** in the web app shows the same steps. Details, including the
+MCP files extension the server supports, are in [docs/claude-apps.md](docs/claude-apps.md).
 
 ## How it works
 
@@ -168,7 +183,8 @@ cd server && ../.venv/bin/python -m pytest -q && cd ../qa && ../.venv/bin/python
   over a connection pinned to that certificate. The server refuses to hand out setup scripts over plain http, and
   plain http only redirects to https. Computers that can't reach GitHub can use a copy of `connect/` hosted
   anywhere they trust over HTTPS (`AB_CONNECT_URL`).
-- **Claude Code sign-in.** Redirects go only to Claude Code's loopback listener, unless an admin lists another https host in `AB_OAUTH_REDIRECT_HOSTS`; the consent page names any other destination.
+- **Claude Code sign-in.** Redirects go only to Claude Code's loopback listener and to Claude's hosted callback (`https://claude.ai/api/mcp/auth_callback`, exactly; `AB_CLAUDE_WEB=false` turns it off), unless an admin lists another https host in `AB_OAUTH_REDIRECT_HOSTS`; the consent page names any other destination.
+- **File transfers.** Upload and download targets live on the server's own origin and need the same sign-in token as the MCP call. An upload takes the announced size once; the retry that saves it is signed, bound to the person and the call, and works once.
 - **Secret key.** With secure cookies on (as in compose), the app refuses to start without an `AB_SECRET_KEY` of at least 16 characters. In development with no key set, it makes a fresh random key each run, so sign-ins end on restart.
 - **Paths.** One normalizer refuses `..`, hidden names, Windows-invalid names and symlink escapes, and every operation checks the same grants.
 - **Windows share.** SMB 3.1.1 only, encryption and signing required, Kerberos only, no guest. Access-based enumeration is on, and system folders are hidden. Permissions can't be changed from Explorer, and the app reports and repairs drift.

@@ -73,7 +73,7 @@
         {:else if synced}
           <p class="muted">From now on, files Claude makes there are copied into your folders after each reply. Go back to the computer; setup finishes by itself.</p>
         {:else}
-          <p class="muted">Nothing will be copied from it. Go back to the computer; setup finishes by itself. You can turn on syncing later from Connect Claude Code.</p>
+          <p class="muted">Nothing will be copied from it. Go back to the computer; setup finishes by itself. You can turn on syncing later from Connect Claude.</p>
         {/if}
       </div>
       <div class="row btns">
@@ -138,7 +138,7 @@
         {/if}
       </section>
 
-      <p class="note" style="margin:0"><Icon name="lock" size={13} /> The computer can only add files to your own folders. It can’t open, change, delete or share anything already here, and you can turn it off at any time under Connect Claude Code.</p>
+      <p class="note" style="margin:0"><Icon name="lock" size={13} /> The computer can only add files to your own folders. It can’t open, change, delete or share anything already here, and you can turn it off at any time under Connect Claude.</p>
 
       <div class="acts">
         <button class="btn" disabled={busy} onclick={() => decide('connect')}>Connect without syncing</button>

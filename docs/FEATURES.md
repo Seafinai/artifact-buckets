@@ -58,7 +58,7 @@ against stand-ins, but still needs a real Active Directory, Entra tenant or Samb
 | ID | Feature | Expected | Status |
 |---|---|---|---|
 | D1 | Discovery | `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server` metadata. 401 from `/mcp` carries `WWW-Authenticate: Bearer resource_metadata=…`. | built |
-| D2 | Dynamic client registration | Only loopback `http` redirect URIs, or `https` hosts an admin lists in `AB_OAUTH_REDIRECT_HOSTS`; no fragments. | built |
+| D2 | Dynamic client registration | Only loopback `http` redirect URIs, Claude's hosted callback (E9), or `https` hosts an admin lists in `AB_OAUTH_REDIRECT_HOSTS`; no fragments. | built |
 | D3 | Authorize and consent | Not signed in → login page, then back. Signed in → consent page; Allow returns a code to the registered redirect (loopback may use any port). Deny returns `access_denied`. Enter connects. A non-loopback destination is named in a warning. CSRF-checked. | built |
 | D4 | PKCE | S256 only; wrong verifier fails; codes are single-use and expire in 5 minutes. | built |
 | D5 | Tokens | Access 60 minutes, refresh 30 days with rotation. Reusing an old refresh token revokes the whole sign-in. Revoke endpoint. | built |
@@ -77,6 +77,9 @@ against stand-ins, but still needs a real Active Directory, Entra tenant or Samb
 | E6 | Errors | Tool failures come back as `isError: true` with a readable message; protocol errors as JSON-RPC errors. | built |
 | E8 | Safe save-back | `save_artifact` with `if_version` is refused (conflict, naming who saved the newer version) if the file changed since it was opened, or was moved, renamed or deleted meanwhile. `get_artifact` reports the caller's role, and marks text over 2 MB as `truncated` with a note not to save it back; with `as_base64` returns binary files up to 10 MB. Links returned point to the viewer. | built |
 | E7 | Pause | Admin can pause Claude Code saves; web uploads still work. | built |
+| E9 | Claude's apps | claude.ai, Claude Desktop and mobile connect as a custom connector: Claude's hosted callback `https://claude.ai/api/mcp/auth_callback` (and the `claude.com` one) is allowed exactly, unless `AB_CLAUDE_WEB=false`. The consent page names Claude; the connection is listed as *Claude on the web*. Connect page shows the connector address, or why the server isn't reachable yet (http, LAN name, private IP, self-signed). | built |
+| E10 | Files extension | `io.modelcontextprotocol/files` (draft): `server/discover` without sign-in; `save_file` (`x-mcp-file`, inline up to 4 MB, else `upload_required` after every metadata check) and `download_file` (target in `_meta`), listed only for clients that declare the extension. Targets are `path` targets with `credentials: include`. Upload: exact size, one write, 25 minutes. Retry: signed `requestState` bound to person, tool and arguments, one use, digest checked. Download: same sign-in, permission rechecked, 410 if the file changed, ranges. Missing capability: -32021 as HTTP 400. | built |
+| E11 | Public address | `artifact-buckets tunnel --host NAME` runs a Cloudflare Tunnel connector (token prompted, kept in `tunnel.env`, mode 600, given only to the connector) and makes the public name the app's address; `--off` restores the old one; upgrades keep it. Guide: `docs/public-https.md`. | built |
 
 ## F. Routing rules
 

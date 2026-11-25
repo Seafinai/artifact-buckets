@@ -175,6 +175,21 @@ class OAuthCode(Base):
     used: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class UploadSlot(Base):
+    """A file Claude is sending out of band (the MCP files extension): reserved when the save is accepted,
+    filled by one PUT, and used once by the retry that saves it. Bytes wait in the tree's .staging folder."""
+    __tablename__ = "upload_slots"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    path: Mapped[str] = mapped_column(String(1024))
+    size: Mapped[int] = mapped_column(BigInteger)
+    mime: Mapped[str] = mapped_column(String(255), default="application/octet-stream")
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(16), default="pending")  # pending | stored | used
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime, index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class WebSession(Base):
     __tablename__ = "web_sessions"
     id_hash: Mapped[str] = mapped_column(String(64), primary_key=True)

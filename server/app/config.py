@@ -87,6 +87,9 @@ class Settings:
     # (for example a web-based client) must be listed here, comma-separated, or registration is refused.
     oauth_redirect_hosts: tuple[str, ...] = field(default_factory=lambda: tuple(
         h.strip().lower() for h in os.environ.get("AB_OAUTH_REDIRECT_HOSTS", "").split(",") if h.strip()))
+    # Claude on the web, desktop and mobile (claude.ai custom connectors) signs in through Claude's own hosted
+    # callback. On by default: that one exact address is allowed, nothing else on claude.ai. Off: AB_CLAUDE_WEB=false.
+    claude_web: bool = field(default_factory=lambda: _bool("AB_CLAUDE_WEB", True))
 
     def dev_key(self) -> None:
         """Development only: with no AB_SECRET_KEY and no secure cookies, make a key fresh for this run,

@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import accounts, api, audit, claude_dist, config, sync, directory, fs, mcp, oauth, paths, storage
+from . import accounts, api, audit, claude_dist, config, sync, directory, filexfer, fs, mcp, oauth, paths, storage
 from .db import Volume, init_engine, new_session
 from .errors import AppError
 
@@ -77,6 +77,7 @@ def run_jobs_once() -> dict[str, Any]:
         "scan": lambda db: len(storage.scan(db)),
         "index": index_tree,
         "purge": lambda db: fs.purge_trash(db),
+        "uploads": filexfer.purge_expired,
         "drain": lambda db: sum(storage.drain_step(db, v.id)
                                 for v in list(db.scalars(select(Volume).where(Volume.status == "draining")))),
         "directory": lambda db: (directory.sync(db, None) if config.settings.ldap_enabled and directory.is_stale(db, 15)
@@ -154,6 +155,7 @@ def create_app() -> FastAPI:
     app.include_router(oauth.router)
     app.include_router(claude_dist.router)
     app.include_router(sync.router)
+    app.include_router(filexfer.router)
     app.include_router(mcp.router)
     app.include_router(api.router)
     app.include_router(api.preview_router)

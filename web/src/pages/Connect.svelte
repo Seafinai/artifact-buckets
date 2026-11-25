@@ -41,12 +41,17 @@
   const mcpUrl = `${session.base_url}/mcp`;
   const setup = session.claude || {};
   let os = $state(/Windows/i.test(navigator.userAgent) ? 'windows' : 'unix');
+  const web = setup.web || { ready: false, why: 'off', url: mcpUrl };
+  const host = (() => { try { return new URL(session.base_url).host; } catch { return session.base_url; } })();
+  const guide = 'https://github.com/Seafinai/artifact-buckets/blob/main/docs/public-https.md';
+  const isWeb = (d) => d.app === 'claude_web';
 </script>
 
 <div class="page">
-  <header class="page-head"><h1>Connect Claude Code</h1></header>
+  <header class="page-head"><h1>Connect Claude</h1></header>
 
   <section class="card setup">
+    <div class="kind"><Icon name="terminal" size={15} /><span>Claude Code</span><span class="faint">terminal, VS Code, JetBrains</span></div>
     <div class="ways">
       <div class="way">
         <h2>Ask Claude Code</h2>
@@ -69,6 +74,43 @@
       <li><Icon name="folder" size={15} /><span>Saves land in <span class="mono">{home}/projects</span></span></li>
     </ol>
     {#if setup.fingerprint}<p class="fp" title="The setup line checks the server's certificate against this before trusting it">Certificate SHA-256 <span class="mono">{setup.fingerprint.match(/.{1,4}/g).join(' ')}</span></p>{/if}
+  </section>
+
+  <section class="card web" id="web">
+    <div class="kind"><Icon name="sparkle" size={15} /><span>Claude apps</span><span class="faint">web, desktop and mobile</span></div>
+    {#if web.ready}
+      <div class="web-body">
+        <div class="web-copy">
+          <h2>Add it as a connector</h2>
+          <p class="note">Claude can then save what it makes into your folders, and open files from them, in any chat.</p>
+          <Copy text={web.url} label="the connector address" />
+        </div>
+        <ol class="steps">
+          <li><span class="n">1</span><span>In Claude, open <b>Settings</b>, then <b>Connectors</b>, and choose <b>Add custom connector</b></span></li>
+          <li><span class="n">2</span><span>Name it <b>Artifact Buckets</b> and paste the address</span></li>
+          <li><span class="n">3</span><span>Press <b>Connect</b> there, then <b>Connect</b> on the page that opens here</span></li>
+        </ol>
+      </div>
+      <p class="web-foot">On a Team or Enterprise plan, an owner adds the connector once under <b>Organization settings</b>, then <b>Connectors</b>. Each person then connects with their own account.</p>
+    {:else}
+      <div class="web-body blocked">
+        <span class="bi"><Icon name="lock" size={16} /></span>
+        <div class="web-copy">
+          {#if web.why === 'off'}
+            <h2>Turned off on this server</h2>
+            <p class="note">An admin can turn it back on by removing <span class="mono">AB_CLAUDE_WEB=false</span> from the server’s settings.</p>
+          {:else}
+            <h2>Needs a public address first</h2>
+            <p class="note">Claude’s apps reach connectors from the internet, so this server needs a public https address with a trusted certificate.
+              {#if web.why === 'self_signed'}<span class="mono">{host}</span> uses a self-signed certificate, which Claude won’t trust.
+              {:else}<span class="mono">{host}</span> is only reachable on your own network.{/if}
+              A Cloudflare Tunnel gives it one in a few minutes, with no ports to open.</p>
+            {#if session.isAdmin}<a class="btn" href={guide} target="_blank" rel="noopener" style="align-self:flex-start"><Icon name="external" size={14} />Set up a public address</a>
+            {:else}<p class="note" style="margin:0">Ask whoever runs Artifact Buckets to set one up.</p>{/if}
+          {/if}
+        </div>
+      </div>
+    {/if}
   </section>
 
   <details class="card alt" id="remove">
@@ -118,7 +160,7 @@
 
   <section class="card">
     <div class="hd">
-      <h2>{everyone ? 'Everyone’s connected computers' : 'Your connected computers'}</h2>
+      <h2>{everyone ? 'Everyone’s connections' : 'Your connections'}</h2>
       <span class="row" style="gap:12px"><span class="note">{devices.length} connected</span>
         {#if session.isAdmin}<div class="segs" role="group" aria-label="Whose"><button class="seg" class:on={!everyone} onclick={() => { everyone = false; load(); }}>Mine</button><button class="seg" class:on={everyone} onclick={() => { everyone = true; load(); }}>Everyone</button></div>{/if}
       </span>
@@ -128,7 +170,7 @@
     {:else}
       {#each devices as d}
         <div class="dev">
-          <span class="dvi"><Icon name="laptop" /></span>
+          <span class="dvi"><Icon name={isWeb(d) ? 'sparkle' : 'laptop'} /></span>
           <span class="grow" style="display:flex;flex-direction:column;gap:3px">
             <span style="font-weight:500">{d.name}{#if everyone} <span class="note">· {d.user}</span>{/if}</span>
             <span class="note">Connected {ago(d.created_at)} · last used {d.last_used ? ago(d.last_used) : 'not yet'} · stays signed in until {when(d.expires_at)} unless unused</span>
@@ -214,7 +256,24 @@
 {/if}
 
 <style>
-  .setup { padding: 0; overflow: hidden; }
+  .setup, .web { padding: 0; overflow: hidden; }
+  .kind { display: flex; align-items: center; gap: 9px; padding: 12px 24px; border-bottom: 1px solid var(--line); font-size: 12.5px; font-weight: 500; color: var(--text-2); }
+  .kind :global(.ic) { color: var(--amber); }
+  .kind .faint { font-weight: 400; color: var(--faint); }
+  .web-body { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; padding: 22px 24px; align-items: start; }
+  @media (max-width: 860px) { .web-body { grid-template-columns: 1fr; gap: 18px; } }
+  .web-copy { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .web-copy h2 { margin: 0; }
+  .web-copy .note { margin: 0; }
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+  .steps li { display: flex; gap: 12px; align-items: flex-start; }
+  .steps b { color: var(--text); font-weight: 500; }
+  .steps .n { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11.5px; font-weight: 600; color: var(--amber); background: var(--amber-bg); border: 1px solid var(--amber-edge); }
+  .web-foot { margin: 0; padding: 12px 24px; border-top: 1px solid var(--line); background: var(--bg-side); font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+  .web-foot b { color: var(--text-2); font-weight: 500; }
+  .blocked { grid-template-columns: auto minmax(0, 1fr); gap: 16px; }
+  .bi { width: 34px; height: 34px; border-radius: 9px; background: var(--raise); color: var(--text-2); display: grid; place-items: center; }
+  .blocked .mono { font-size: 12px; color: var(--text-2); }
   .ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
   .way { padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
   .way > h2, .way > .row { min-height: 34px; display: flex; align-items: center; }

@@ -12,6 +12,7 @@
 # Everything lives in one folder (/opt/artifact-buckets) and its containers. Afterwards:
 #
 #   sudo artifact-buckets status | logs [-f] | password | restart | upgrade | uninstall [--purge]
+#   sudo artifact-buckets tunnel --host files.example.com    a public address through a Cloudflare Tunnel
 #
 # Options (install):
 #   --host NAME         the name or IP address people reach the server by
@@ -56,7 +57,7 @@ ZFS_GROUP="$APP_SLUG-zfs"
 
 HOST="" EMAIL="" TLS="auto" CERT="" KEY="" HTTPS_PORT="" HTTP_PORT="" ZFS="" NO_ZFS="" IMAGE="" BUILD=""
 SOURCE="${AB_SOURCE:-}" CA_FILE="" YES="" PURGE="" HOST_GIVEN="" OLD_IMAGE_ID=""
-EXTRA_IPS="" PUB_HTTPS="" PUB_HTTP="" DOCKER_NEW="" KEPT_DATA=""
+EXTRA_IPS="" PUB_HTTPS="" PUB_HTTP="" DOCKER_NEW="" KEPT_DATA="" TUNNEL_TOKEN="" TUNNEL_OFF=""
 
 if [ -t 1 ]; then B=$(printf '\033[1m'); D=$(printf '\033[2m'); R=$(printf '\033[0m'); else B="" D="" R=""; fi
 say()  { printf '%s\n' "$*"; }
@@ -440,6 +441,23 @@ write_env() {
   env_set AB_INSTALL_URL ""
   if [ "$TLS" = self-signed ]; then env_set AB_INSTALL_CA_FILE /certs/server.crt; else env_set AB_INSTALL_CA_FILE ""; fi
   set_connect_url
+  tunnel_env
+}
+
+# With a Cloudflare Tunnel, the app's own address is the tunnel's public name (so sign-in, links and the
+# Claude Code setup lines use it). The local address stays as it was, for turning the tunnel off again.
+tunnel_env() {
+  if [ -s "$DIR/tunnel.env" ] && [ -n "$(env_get AB_TUNNEL_HOST)" ]; then
+    env_set AB_LOCAL_BASE_URL "${BASE_URL:-$(env_get AB_LOCAL_BASE_URL)}"
+    env_set AB_LOCAL_INSTALL_CA_FILE "$(env_get AB_INSTALL_CA_FILE)"
+    env_set AB_BASE_URL "https://$(env_get AB_TUNNEL_HOST)"
+    env_set AB_INSTALL_CA_FILE ""
+    env_set COMPOSE_PROFILES tunnel
+  elif [ -n "$(env_get AB_TUNNEL_HOST)" ]; then
+    # Reinstalled after an uninstall, which takes the token away: the tunnel is off until 'tunnel' runs again.
+    env_set AB_TUNNEL_HOST ""; env_set COMPOSE_PROFILES ""
+    warn "The Cloudflare Tunnel is off after the reinstall. Turn it on again with: sudo $APP_SLUG tunnel"
+  fi
 }
 
 # Where the Claude Code connect scripts come from (for a self-signed certificate): this repository on GitHub,
@@ -678,12 +696,85 @@ cmd_uninstall() {
     say "Removed $APP_NAME and its data."
   else
     rm -rf "${DIR:?}/src" "${DIR:?}/src.new" "${DIR:?}/bin" "$DIR/compose.yml" "$DIR/Caddyfile" "${DIR:?}/${APP_SLUG:?}"
+    # The tunnel token goes too (a reinstall asks for it again); the tunnel's name stays in .env.
+    rm -f "$DIR/tunnel.env"
     # The marker stays with the data so the folder can still be purged later.
     say "Removed $APP_NAME. Your files, database and settings are still in $DIR."
     say "  Install again:   curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo sh"
     say "  Delete them too: curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo sh -s -- uninstall --purge"
   fi
   say "${D}Docker itself was left installed.${R}"
+}
+
+is_public_name() { # a DNS name with a dot, letters/digits/hyphens only, not a LAN-only suffix
+  printf '%s' "$1" | grep -Eq '^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$' || return 1
+  case $1 in *.local|*.lan|*.internal|*.home.arpa|*.localdomain|*.corp) return 1 ;; esac
+}
+
+cmd_tunnel() {
+  need_root
+  take_lock
+  [ -f "$DIR/.$APP_SLUG-install" ] && [ -f "$DIR/.env" ] && [ -f "$DIR/compose.yml" ] || die "$APP_NAME isn't installed in $DIR."
+  ensure_docker
+  if [ -n "$TUNNEL_OFF" ]; then
+    [ -n "$(env_get AB_TUNNEL_HOST)" ] || { say "No tunnel is set up."; return 0; }
+    step "Turning the Cloudflare Tunnel off"
+    compose rm -sf cloudflared >/dev/null 2>&1 || true
+    env_set AB_BASE_URL "$(env_get AB_LOCAL_BASE_URL)"
+    env_set AB_INSTALL_CA_FILE "$(env_get AB_LOCAL_INSTALL_CA_FILE)"
+    rm -f "$DIR/tunnel.env"; env_set AB_TUNNEL_HOST ""; env_set COMPOSE_PROFILES ""
+    compose up -d --force-recreate --no-deps app >/dev/null 2>&1 || compose up -d --force-recreate --no-deps app
+    say "Off. $APP_NAME is at $(env_get AB_BASE_URL) again. You can delete the tunnel in Cloudflare."
+    return 0
+  fi
+  [ -n "$HOST" ] || ask HOST "The public name you gave the tunnel in Cloudflare (e.g. files.example.com)" "$(env_get AB_TUNNEL_HOST)"
+  [ -n "$HOST" ] || die "Give the tunnel's public name with --host."
+  is_public_name "$HOST" || die "$HOST isn't a public DNS name. Use the name you set under the tunnel's Public Hostname in Cloudflare."
+  if [ -z "$TUNNEL_TOKEN" ]; then
+    [ ! -s "$DIR/tunnel.env" ] || TUNNEL_TOKEN=$(sed -n 's/^TUNNEL_TOKEN=//p' "$DIR/tunnel.env")
+    if can_ask; then
+      printf 'Tunnel token (from Cloudflare; it is not shown as you paste)%s: ' "${TUNNEL_TOKEN:+ [keep the current one]}" >/dev/tty
+      _s=$(stty -g </dev/tty 2>/dev/null || true); stty -echo </dev/tty 2>/dev/null || true
+      IFS= read -r _t </dev/tty || _t=""
+      [ -z "$_s" ] || stty "$_s" </dev/tty 2>/dev/null || true; printf '\n' >/dev/tty
+      [ -z "$_t" ] || TUNNEL_TOKEN=$_t
+    fi
+  fi
+  TUNNEL_TOKEN=$(printf '%s' "$TUNNEL_TOKEN" | tr -d ' \r\n')
+  case $TUNNEL_TOKEN in
+    cloudflared\ *|*--token*) die "Paste only the token, the long value after --token, not the whole command." ;;
+  esac
+  [ ${#TUNNEL_TOKEN} -ge 40 ] && printf '%s' "$TUNNEL_TOKEN" | grep -Eq '^[A-Za-z0-9+/=_-]+$' \
+    || die "That doesn't look like a tunnel token. In Cloudflare, open the tunnel, choose Docker, and copy the value after --token."
+  step "Connecting $HOST through a Cloudflare Tunnel"
+  [ -n "$(env_get AB_LOCAL_BASE_URL)" ] || env_set AB_LOCAL_BASE_URL "$(env_get AB_BASE_URL)"
+  [ -n "$(env_get AB_TUNNEL_HOST)" ] || env_set AB_LOCAL_INSTALL_CA_FILE "$(env_get AB_INSTALL_CA_FILE)"
+  _t=$(mktemp "$DIR/.tunnel.env.XXXXXX"); printf 'TUNNEL_TOKEN=%s\n' "$TUNNEL_TOKEN" >"$_t"; chmod 600 "$_t"; mv "$_t" "$DIR/tunnel.env"
+  env_set AB_TUNNEL_HOST "$HOST"
+  env_set AB_BASE_URL "https://$HOST"
+  env_set AB_INSTALL_CA_FILE ""
+  env_set COMPOSE_PROFILES tunnel
+  compose up -d --quiet-pull cloudflared >/dev/null 2>&1 || compose up -d cloudflared
+  compose up -d --force-recreate --no-deps app cloudflared >/dev/null 2>&1 || compose up -d --force-recreate --no-deps app cloudflared
+  _i=0; _ok=""
+  printf 'Waiting for https://%s to answer' "$HOST"
+  while [ $_i -lt 30 ]; do
+    if curl -fsS -o /dev/null --max-time 5 "https://$HOST/healthz" 2>/dev/null; then _ok=1; break; fi
+    _i=$((_i + 1)); printf '.'; sleep 2
+  done
+  printf '\n'
+  if [ -n "$_ok" ]; then
+    say ""
+    say "${B}$APP_NAME is at https://$HOST${R}"
+    say ""
+    say "  Claude on the web, desktop and mobile: add a custom connector with https://$HOST/mcp"
+    say "  (the Connect Claude page in the app shows the steps)."
+    say "  Claude Code computers set up before this: run the new setup line from the Connect Claude page."
+  else
+    warn "https://$HOST doesn't answer yet. In Cloudflare, check that the tunnel shows Healthy and that its public hostname"
+    warn "$HOST points to the service http://app:8080. 'sudo $APP_SLUG logs' shows the tunnel's side (look for cloudflared)."
+  fi
+  say "  Turn it off again:  sudo $APP_SLUG tunnel --off"
 }
 
 cmd_status() {
@@ -703,6 +794,7 @@ $APP_NAME installer.  curl -fsSL https://raw.githubusercontent.com/$REPO/main/in
                       --source DIR|URL  --ref REF  --ca-file F  --dir DIR  --yes
   status | logs [app|caddy|db] [-f] | password | reset-password [USER] | restart
   upgrade             [--source DIR|URL] [--build] [--image REF]
+  tunnel              --host NAME [--token T]  a public address through a Cloudflare Tunnel; --off to remove it
   uninstall           [--purge] [--yes]   (keeps files and database unless --purge)
 
 Details: https://github.com/$REPO#install
@@ -716,11 +808,11 @@ need() {
 
 main() {
   _cmd=install
-  case ${1:-} in install|upgrade|uninstall|status|logs|password|reset-password|restart|help|-h|--help) _cmd=$1; shift ;; esac
+  case ${1:-} in install|upgrade|uninstall|status|logs|password|reset-password|restart|tunnel|help|-h|--help) _cmd=$1; shift ;; esac
   if [ "$_cmd" = logs ]; then
     [ -f "$DIR/compose.yml" ] || die "$APP_NAME isn't installed in $DIR."
     _f=""; _svc=""
-    for _a in "$@"; do case $_a in -f|--follow) _f=1 ;; app|caddy|db) _svc="$_svc $_a" ;; *) die "logs takes app, caddy or db, and -f to follow." ;; esac; done
+    for _a in "$@"; do case $_a in -f|--follow) _f=1 ;; app|caddy|db|cloudflared) _svc="$_svc $_a" ;; *) die "logs takes app, caddy, db or cloudflared, and -f to follow." ;; esac; done
     if [ -n "$_f" ]; then compose logs --tail 100 -f $_svc; else compose logs --tail 200 $_svc; fi
     return
   fi
@@ -746,6 +838,8 @@ main() {
       --dir) need "$@"; DIR=$2; shift 2 ;;
       --yes|-y) YES=1; shift ;;
       --purge) PURGE=1; shift ;;
+      --token) need "$@"; TUNNEL_TOKEN=$2; shift 2 ;;
+      --off) TUNNEL_OFF=1; shift ;;
       *) die "Unknown option $1 (try --help)" ;;
     esac
   done
@@ -760,6 +854,7 @@ main() {
     upgrade) cmd_upgrade ;;
     uninstall) cmd_uninstall ;;
     status) cmd_status ;;
+    tunnel) cmd_tunnel ;;
     restart) need_root; compose restart; say "Restarted." ;;
     password) need_root; [ -f "$DIR/.$APP_SLUG-install" ] || die "$APP_NAME isn't installed in $DIR."; say "admin / $(env_get AB_BOOTSTRAP_PASSWORD)  ${D}(the first password; if it was changed in the app, this one no longer works; $APP_SLUG reset-password makes a new one)${R}" ;;
     reset-password) need_root; [ -f "$DIR/.$APP_SLUG-install" ] || die "$APP_NAME isn't installed in $DIR."

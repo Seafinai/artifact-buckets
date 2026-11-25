@@ -216,9 +216,16 @@ def index_file(db: Session, path: str, source: str = "smb") -> File | None:
     return f
 
 
-def save_file(db: Session, actor: Actor, path: str, data: bytes, meta: SaveMeta | None = None) -> dict[str, Any]:
+def check_save(db: Session, actor: Actor, path: str, size: int, meta: SaveMeta | None = None) -> str:
+    """Every check a save makes before it needs the bytes (where, who, how big, quota). Used to accept or
+    refuse a file before it is uploaded. Returns the normalized path."""
     meta = meta or SaveMeta(source=actor.via)
     path = paths.normalize(path)
+    _precheck(db, actor, path, size, meta)
+    return path
+
+
+def _precheck(db: Session, actor: Actor, path: str, size: int, meta: SaveMeta) -> tuple[File | None, list[FileVersion], bool, list[int]]:
     if len(path.strip("/").split("/")) < 3:
         raise Forbidden("Files go inside a person's or a group's folder")
     if meta.source == "mcp" and get_setting(db, "ingest_paused", False):
@@ -230,12 +237,12 @@ def save_file(db: Session, actor: Actor, path: str, data: bytes, meta: SaveMeta 
         _need(db, actor, folder, "editor", "save files")
     except (Forbidden, NotFound):
         if meta.source == "mcp":
-            audit.log(db, actor, "file.save", path, ok=False, reason="no write access", size=len(data))
+            audit.log(db, actor, "file.save", path, ok=False, reason="no write access", size=size)
             db.commit()
         raise
     limit = config.settings.max_file_bytes
-    if len(data) > limit:
-        audit.log(db, actor, "file.save", path, ok=False, reason="too large", size=len(data))
+    if size > limit:
+        audit.log(db, actor, "file.save", path, ok=False, reason="too large", size=size)
         db.commit()
         raise TooLarge(f"File is larger than the {limit // (1024 * 1024)} MB limit")
     d = paths.disk(path)
@@ -245,12 +252,21 @@ def save_file(db: Session, actor: Actor, path: str, data: bytes, meta: SaveMeta 
     if existing is None and os.path.isfile(d):
         existing = index_file(db, path)
     try:
-        drops, drop_replaced = _plan_quota(db, path, len(data), existing)
+        drops, drop_replaced = _plan_quota(db, path, size, existing)
         dropped = sorted([v.version for v in drops] + ([existing.version] if existing is not None and drop_replaced else []))
     except QuotaExceeded:
-        audit.log(db, actor, "file.save", path, ok=False, reason="quota", size=len(data))
+        audit.log(db, actor, "file.save", path, ok=False, reason="quota", size=size)
         db.commit()
         raise
+    return existing, drops, drop_replaced, dropped
+
+
+def save_file(db: Session, actor: Actor, path: str, data: bytes, meta: SaveMeta | None = None) -> dict[str, Any]:
+    meta = meta or SaveMeta(source=actor.via)
+    path = paths.normalize(path)
+    folder = paths.parent(path)
+    d = paths.disk(path)
+    existing, drops, drop_replaced, dropped = _precheck(db, actor, path, len(data), meta)
     ensure_dir(folder, actor.user)
     tmp = os.path.join(paths.system_dir("tmp"), uuid.uuid4().hex)
     with open(tmp, "wb") as fh:

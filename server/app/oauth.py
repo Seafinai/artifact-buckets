@@ -55,6 +55,14 @@ def as_metadata() -> dict[str, Any]:
             "scopes_supported": ["buckets"]}
 
 
+# Where Claude's hosted apps (claude.ai, Claude Desktop, Claude mobile) finish a custom connector's sign-in.
+CLAUDE_WEB_CALLBACKS = ("https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback")
+
+
+def is_claude_web(uri: str) -> bool:
+    return uri in CLAUDE_WEB_CALLBACKS
+
+
 def _redirect_ok(uri: str) -> bool:
     try:
         p = urlparse(uri)
@@ -63,6 +71,8 @@ def _redirect_ok(uri: str) -> bool:
     if p.fragment:
         return False
     if p.scheme == "http" and p.hostname in ("localhost", "127.0.0.1", "::1"):
+        return True
+    if config.settings.claude_web and uri in CLAUDE_WEB_CALLBACKS:
         return True
     # Any other site must be listed by the admin, so nobody can register a client that sends a person's
     # sign-in to their own server (consent phishing).
@@ -97,6 +107,8 @@ async def register(request: Request) -> Response:
     name = str(body.get("client_name") or "Claude Code")[:128]
     # Claude Code names a plugin's connection "Claude Code (plugin:<plugin>:<server>)"; people just see "Claude Code".
     shown = re.sub(r"\s*\((?:plugin:)?artifact-buckets(?::artifact-buckets)?\)$", "", name) or "Claude Code"
+    if all(is_claude_web(u) for u in uris):
+        shown = "Claude on the web"
     cid = "abc_" + secrets.token_urlsafe(16)
     with new_session() as db:
         db.add(OAuthClient(client_id=cid, name=shown, redirect_uris=uris))
