@@ -5,7 +5,8 @@ makes into their folders, find and open earlier work, and share folders, in any 
 they have in the web app. Admins also get the admin tools, as they do in Claude Code.
 
 What it needs: a public `https` address with a trusted certificate, because Claude's apps reach connectors from
-the internet. [public-https.md](public-https.md) sets one up with a Cloudflare Tunnel. **Connect Claude** in the
+the internet. [public-https.md](public-https.md) covers your company's own domain, a public name with Let's Encrypt, Tailscale
+Funnel and a Cloudflare Tunnel. **Connect Claude** in the
 web app shows the connector address and the steps once the address is public, and says what's missing until then.
 
 ## Sign-in

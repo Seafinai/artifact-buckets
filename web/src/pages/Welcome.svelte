@@ -15,7 +15,7 @@
   const STEPS = [
     { key: 'hello', label: 'Welcome' },
     ...(session.isAdmin ? [{ key: 'team', label: 'Set up your team' }] : []),
-    { key: 'connect', label: 'Connect Claude Code' },
+    { key: 'connect', label: 'Connect Claude' },
     { key: 'work', label: 'Bring in your work' },
     { key: 'land', label: 'Where things land' },
   ];
@@ -135,7 +135,7 @@
           </div>
 
         {:else if cur === 'connect'}
-          <h1>Connect Claude Code</h1>
+          <h1>Connect Claude</h1>
           <div class="pick">
             <div class="pick-row">
               <span class="pick-t"><b>Claude desktop app</b><span>Download, open it, press Install.</span></span>
@@ -160,7 +160,7 @@
               <span><b>Connected.</b> {devices[0].name}, {agoPhrase(devices[0].created_at)}.{#if devices.length > 1} And {devices.length - 1} more.{/if}</span>
             {:else}
               <span class="pulse" aria-hidden="true"></span>
-              <span>Waiting for Claude Code to sign in… this updates by itself.</span>
+              <span>Waiting for Claude to connect. This updates by itself.</span>
             {/if}
           </div>
 

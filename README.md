@@ -117,8 +117,9 @@ https://files.example.com/claude/setup.md"*. To roll it out to every computer at
 
 ## Connect Claude on the web, desktop and mobile
 
-Claude's apps reach connectors from the internet, so the server needs a public `https` address first. With a
-[Cloudflare Tunnel](docs/public-https.md) that takes no open ports:
+Claude's apps reach connectors from the internet, so the server needs a public `https` address first: your
+company's own domain behind its reverse proxy, a public name with Let's Encrypt, Tailscale Funnel, or a Cloudflare
+Tunnel ([guide](docs/public-https.md)). The tunnel is built into the installer and needs no open ports:
 
 ```bash
 sudo artifact-buckets tunnel --host files.example.com     # paste the tunnel's token when asked

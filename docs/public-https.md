@@ -1,21 +1,64 @@
-# A public address with Cloudflare Tunnel
+# A public address for Claude's apps
 
-Claude Code connects from each person's computer, so a server on your own network is enough for it. Claude's
-web, desktop and mobile apps are different: they reach connectors from Anthropic's servers on the internet. For
-them, Artifact Buckets needs:
+Claude Code and the Claude desktop extension connect from each person's computer, so a server on your own network
+is all they need. Claude's web, desktop and mobile apps reach connectors from Anthropic's servers on the internet
+instead. For those, Artifact Buckets needs:
 
 - a public `https://` address, such as `https://files.example.com`
 - a certificate from a public authority (a self-signed one is refused)
 - nothing in front of it that asks for a separate sign-in (Artifact Buckets does its own)
 
+This is optional, and an admin sets it up once. Pick the way that fits how you already run things.
+
+| You have | Use |
+|---|---|
+| A company domain and IT that runs a reverse proxy, load balancer or firewall publishing | [Your company's domain](#your-companys-domain) |
+| A server the internet can reach on ports 80 and 443 | [A public name with Let's Encrypt](#a-public-name-with-lets-encrypt) |
+| A small team and no IT | [Tailscale Funnel](#tailscale-funnel) or [Cloudflare Tunnel](#cloudflare-tunnel) |
+
+After the switch, people add the connector in Claude: **Settings**, **Connectors**, **Add custom connector**, and the
+address `https://<your public name>/mcp`. The Connect Claude page shows it once the address works.
+
+## Your company's domain
+
+For IT. Publish the server like any other internal web app:
+
+1. **Name.** Create a DNS record, for example `files.example.com`, pointing at your reverse proxy, load balancer or
+   published firewall rule.
+2. **Certificate.** Use your usual public certificate for that name (wildcard or per-host) on the proxy.
+3. **Route.** Send `https://files.example.com/*` to the server's HTTPS port (443, or the port in
+   `/opt/artifact-buckets/.env`). If the proxy checks the server's certificate, trust the one in
+   `/opt/artifact-buckets/data/tls/public/server.crt`, or send to the HTTP port instead on a trusted network.
+   Keep the `Host` header, allow request bodies up to 500 MB, and don't buffer or time out streamed responses on
+   `/mcp` under 120 seconds.
+4. **No extra sign-in on the API paths.** If your proxy adds single sign-on, leave out `/mcp`, `/oauth`,
+   `/.well-known` and `/claude`: Claude's servers can't pass it, and Artifact Buckets checks every request itself.
+5. **Tell the app its address.** On the server: `sudo sed -i 's|^AB_BASE_URL=.*|AB_BASE_URL=https://files.example.com|' /opt/artifact-buckets/.env`, then
+   `sudo artifact-buckets restart`.
+
+## A public name with Let's Encrypt
+
+On a machine the internet reaches on ports 80 and 443, install (or install again) with
+`--host files.example.com --tls letsencrypt`. Caddy gets and renews the certificate by itself.
+
+## Tailscale Funnel
+
+[Tailscale Funnel](https://tailscale.com/kb/1223/funnel) gives the server a public `https://<machine>.<tailnet>.ts.net`
+address with a trusted certificate, with no ports to open. You need a free Tailscale account with Funnel allowed
+for the machine.
+
+1. On the server: install Tailscale and sign in (`curl -fsSL https://tailscale.com/install.sh | sh`, then
+   `sudo tailscale up`).
+2. Publish the app: `sudo tailscale funnel --bg https+insecure://localhost:443` (use the HTTPS port from
+   `/opt/artifact-buckets/.env` if it isn't 443). It prints the public address.
+3. Tell the app that address, as in step 5 above, and restart.
+
+## Cloudflare Tunnel
+
 A [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/)
-gives you all three without opening a port or touching your firewall. A small `cloudflared` container makes an
-outbound connection to Cloudflare, and Cloudflare serves your public name with its own certificate. It's free,
-and takes about ten minutes.
+works the same way and is built into the installer. You need a domain whose DNS is on Cloudflare.
 
-You need a domain whose DNS is on Cloudflare, and an Artifact Buckets server installed with `install.sh`.
-
-## 1. Create the tunnel in Cloudflare
+### 1. Create the tunnel in Cloudflare
 
 1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), open **Zero Trust**, then **Networks**, then
    **Tunnels**, and choose **Create a tunnel**.
@@ -31,7 +74,7 @@ You need a domain whose DNS is on Cloudflare, and an Artifact Buckets server ins
 `app:8080` is the Artifact Buckets container on its own Docker network, which the connector joins. Nothing on
 the host listens for it, so the tunnel can reach the app and nothing else.
 
-## 2. Connect the server
+### 2. Connect the server
 
 On the server:
 
@@ -52,7 +95,7 @@ history, so prefer the prompt.
 Within a minute the tunnel shows **Healthy** in Cloudflare, and **Connect Claude** in the app shows the steps for
 Claude's apps instead of a warning.
 
-## 3. Add the connector in Claude
+### 3. Add the connector in Claude
 
 In Claude (web or desktop), open **Settings**, then **Connectors**, and choose **Add custom connector**. Name it
 *Artifact Buckets* and paste `https://files.example.com/mcp`. Press **Connect**, sign in to Artifact Buckets if
@@ -63,7 +106,7 @@ On a Team or Enterprise plan, an owner adds the connector once under **Organizat
 **Connectors**. Each person then connects with their own Artifact Buckets account, and sees only the folders they
 can see in the web app.
 
-## Things to know
+### Things to know
 
 - **Computers already running Claude Code** keep working only while the old address answers. After the switch,
   run the new setup line from **Connect Claude** on each of them (or push the new managed settings), so they sign
@@ -79,15 +122,6 @@ can see in the web app.
   Delete the tunnel in Cloudflare afterwards.
 - **Upgrades and reinstalls** keep the tunnel. An uninstall removes the token; run `tunnel` again after
   installing again.
-
-## Other ways to get a public address
-
-Any of these work instead of a tunnel, as long as the address is public `https` with a trusted certificate:
-
-- **A public name pointing at the server.** Install with `--host files.example.com --tls letsencrypt` on a machine
-  that the internet reaches on ports 80 and 443. Caddy gets a Let's Encrypt certificate by itself.
-- **Your own reverse proxy or load balancer** with a public certificate, sending traffic to the server's HTTPS
-  port. Set the app's address to the public one (`AB_BASE_URL` in `/opt/artifact-buckets/.env`) and restart.
 
 ## Sending files, not only text
 
