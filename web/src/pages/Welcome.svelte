@@ -56,6 +56,8 @@
   // A step shows a check when it's actually done, not just passed.
   const doneBy = $derived({ hello: step > 0, team: (team?.people || 0) > 1, connect: connected, work: linked, land: false });
   function go(i) { step = i; navigate(`/welcome?step=${STEPS[i].key}`, true); }
+  // Remember the step, so the Getting started bar on other pages brings the person back to it.
+  $effect(() => { try { sessionStorage.setItem('ab-welcome-step', STEPS[step].key); } catch { /* private mode */ } });
   async function finish(to = '/files') {
     await api.post('/api/sync/welcome/done').catch(() => {});
     session.welcome = false;
@@ -101,7 +103,7 @@
 
         {:else if cur === 'team'}
           <h1>Set up your team</h1>
-          <p class="lede">You’re the first admin. A few things to do before inviting people. Each opens in its own page; come back here from <b>Getting started</b> in your account menu.</p>
+          <p class="lede">You’re the first admin. A few things to do before inviting people. Each opens in its own page, and the Getting started bar brings you back here.</p>
           <div class="todo">
             <button class="td" onclick={() => (pwOpen = true)}>
               <span class="ti"><Icon name="key" /></span>
