@@ -4,7 +4,7 @@
   // and is shown here only when the browser won't let us copy (the Connect page lists it under Advanced).
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
-  let { text } = $props();
+  let { text, primary = true } = $props();
   let done = $state(false);
   let show = $state(false);
   async function copy() {
@@ -15,7 +15,7 @@
 
 <div class="sc">
   <div class="row-main">
-    <button class="btn pri big" onclick={copy}><Icon name={done ? 'check' : 'copy'} />{done ? 'Copied' : 'Copy setup for Claude Code'}</button>
+    <button class="btn big" class:pri={primary} onclick={copy}><Icon name={done ? 'check' : 'copy'} />{done ? 'Copied' : 'Copy setup for Claude Code'}</button>
     {#if done}<span class="hint">Now paste it into Claude Code.</span>{/if}
   </div>
   {#if show}<Copy text={text} label="the setup message" />{/if}

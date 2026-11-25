@@ -6,6 +6,7 @@
   import Icon from '../lib/Icon.svelte';
   import Copy from '../lib/Copy.svelte';
   import SetupCopy from '../lib/SetupCopy.svelte';
+  import { downloadDesktopExtension } from '../lib/desktop.js';
   import Modal from '../lib/Modal.svelte';
 
   let tokens = $state(null);
@@ -51,11 +52,7 @@
   async function desktop() {
     busy = true;
     try {
-      const r = await fetch('/api/claude/desktop-extension', { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': session.csrf } });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || `Download failed (${r.status})`);
-      const url = URL.createObjectURL(await r.blob());
-      const a = Object.assign(document.createElement('a'), { href: url, download: 'artifact-buckets.mcpb' });
-      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+      await downloadDesktopExtension();
       toast('Downloaded. Open it to add Artifact Buckets to Claude Desktop.');
       load();
     } catch (e) { fail(e); } finally { busy = false; }
@@ -77,7 +74,7 @@
     <div class="hero-main">
       <div class="hero-copy">
         <span class="kind"><Icon name="terminal" size={15} />Claude Code<span class="faint">terminal, VS Code, JetBrains, and the desktop app’s Code tab</span></span>
-        <SetupCopy text={setup.prompt} />
+        <SetupCopy text={setup.prompt} primary={false} />
       </div>
       <ol class="steps3">
         <li><span class="n">1</span><span><b>Copy</b> the setup</span></li>
@@ -145,6 +142,13 @@
         </div>
       {/if}
       <div class="adv-sec">
+        <div class="adv-h"><h3>Personal tokens <span class="faint">for build servers and scripts</span></h3>
+          <span class="row" style="gap:8px">
+            {#if session.isAdmin}<button class="btn sm" onclick={() => { everyone = true; load(); }}><Icon name="users" size={14} />Everyone’s connections</button>{/if}
+            <button class="btn sm" onclick={() => { form = { name: '', scope: 'write', folders: '', days: 30 }; dialog = 'new'; }}><Icon name="key" size={14} />New token</button>
+          </span></div>
+      </div>
+      <div class="adv-sec">
         <h3>By hand</h3>
         <Copy text={`claude plugin marketplace add ${setup.marketplace}`} />
         <Copy text={`claude plugin install ${setup.plugin}`} />
@@ -153,6 +157,7 @@
     </div>
   </details>
 
+  {#if devices.length || everyone}
   <section class="card">
     <div class="hd">
       <h2>{everyone ? 'Everyone’s connections' : 'Your connections'}</h2>
@@ -176,6 +181,9 @@
     {/if}
   </section>
 
+  {/if}
+
+  {#if syncers.length}
   <section class="card" id="sync">
     <div class="hd">
       <h2>{everyone ? 'Everyone’s computers that sync' : 'Computers that sync'}</h2>
@@ -197,6 +205,9 @@
     {/if}
   </section>
 
+  {/if}
+
+  {#if personal.length}
   <section class="card">
     <div class="hd">
       <div style="display:flex;flex-direction:column;gap:4px"><h2>Personal tokens</h2><span class="note">For build servers and scripts that can't open a browser</span></div>
@@ -220,6 +231,7 @@
       </table></div>
     {:else if tokens}<div class="empty">No personal tokens.</div>{/if}
   </section>
+  {/if}
 </div>
 
 {#if dialog === 'new'}
@@ -292,9 +304,6 @@
   .adv-sec h3 .faint { color: var(--faint); font-weight: 400; margin-left: 6px; }
   .adv-sec p { margin: 0; }
   .adv-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .kind { display: flex; align-items: center; gap: 9px; padding: 12px 24px; border-bottom: 1px solid var(--line); font-size: 12.5px; font-weight: 500; color: var(--text-2); }
-  .kind :global(.ic) { color: var(--amber); }
-  .kind .faint { font-weight: 400; color: var(--faint); }
   @media (max-width: 860px) { .web-body { grid-template-columns: 1fr; gap: 18px; } }
   .card > .empty { padding: 26px 22px; }
   .fp { margin: 0; padding: 0 24px 14px; background: var(--bg-side); font-size: 11.5px; color: var(--faint); }
