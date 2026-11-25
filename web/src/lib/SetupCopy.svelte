@@ -16,7 +16,7 @@
 <div class="sc">
   <div class="row-main">
     <button class="btn pri big" onclick={copy}><Icon name={done ? 'check' : 'copy'} />{done ? 'Copied' : 'Copy setup for Claude Code'}</button>
-    <span class="hint">{done ? 'Now paste it into Claude Code.' : 'Paste it into Claude Code. It does the rest.'}</span>
+    {#if done}<span class="hint">Now paste it into Claude Code.</span>{/if}
   </div>
   <button class="lnk" onclick={() => (show = !show)} aria-expanded={show}>{show ? 'Hide the message' : 'Show the message'}</button>
   {#if show}<Copy text={text} label="the setup message" />{/if}
