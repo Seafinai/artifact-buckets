@@ -99,6 +99,8 @@
   $effect(() => { route.path; drawer = false; menu = false; });
   const used = $derived(pool ? pool.used_bytes : 0);
   const total = $derived(pool ? pool.total_bytes : 0);
+  // While Getting started isn't finished or skipped, a page opened from one of its steps keeps a way back to it.
+  function resumeStep() { try { return sessionStorage.getItem('ab-welcome-step') || 'hello'; } catch { return 'hello'; } }
 </script>
 
 <Toasts />
@@ -165,6 +167,12 @@
       </div>
     </aside>
     <main class="main">
+      {#if session.welcome}
+        <a class="resume" href={`/welcome?step=${resumeStep()}`}>
+          <Icon name="list" size={15} /><span><b>Getting started</b> isn't finished</span>
+          <span class="resume-go">Continue<Icon name="back" size={14} style="transform:rotate(180deg)" /></span>
+        </a>
+      {/if}
       {#if page && allowed}
         {#key route.path}<Page />{/key}
       {:else if page}
@@ -192,6 +200,13 @@
   .toprow { display: flex; align-items: center; justify-content: space-between; }
   .burger { display: none; }
   .foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+  .resume { display: flex; align-items: center; gap: 10px; margin: 18px 40px -6px; padding: 10px 14px; border-radius: 10px;
+    background: var(--amber-bg); border: 1px solid var(--amber-edge); color: var(--text-2); font-size: 13px; }
+  .resume :global(.ic) { color: var(--amber); flex: none; }
+  .resume b { color: var(--text); font-weight: 500; }
+  .resume:hover { border-color: var(--amber); color: var(--text-2); }
+  .resume-go { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--amber); }
+  @media (max-width: 720px) { .resume { margin: 12px 16px 0; } }
   .meter-card { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; background: #121316; border: 1px solid #1E2024; color: var(--text); }
   .meter-card:hover { border-color: var(--line-hover); color: var(--text); }
   .meter-card .meter { margin-top: 4px; }
