@@ -166,20 +166,19 @@
         </div>
       </div>
     </aside>
-    <main class="main" class:with-resume={session.welcome}>
+    <main class="main">
+      {#if session.welcome}
+        <a class="resume" href={`/welcome?step=${resumeStep()}`}>
+          <Icon name="list" size={15} /><span><b>Getting started</b> isn't finished</span>
+          <span class="resume-go">Continue<Icon name="back" size={14} style="transform:rotate(180deg)" /></span>
+        </a>
+      {/if}
       {#if page && allowed}
         {#key route.path}<Page />{/key}
       {:else if page}
         <div class="page"><div class="card empty">Only admins and auditors can open this page.</div></div>
       {:else}
         <div class="page"><div class="card empty">There's no page here. <a href="/files">Go to your files</a>.</div></div>
-      {/if}
-      {#if session.welcome}
-        <a class="resume" href={`/welcome?step=${resumeStep()}`}>
-          <span class="resume-i"><Icon name="list" size={15} /></span>
-          <span class="resume-t"><b>Getting started</b><span>Pick up where you left off</span></span>
-          <span class="resume-go">Continue<Icon name="back" size={14} style="transform:rotate(180deg)" /></span>
-        </a>
       {/if}
     </main>
   </div>
@@ -201,18 +200,13 @@
   .toprow { display: flex; align-items: center; justify-content: space-between; }
   .burger { display: none; }
   .foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
-  .resume { position: fixed; left: calc(50% + 124px); transform: translateX(-50%); bottom: 24px; z-index: 30; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 10px;
-    border-radius: 12px; background: var(--card-2); border: 1px solid var(--amber-edge); box-shadow: 0 18px 50px -12px rgba(0, 0, 0, .7);
-    color: var(--text); animation: resume-in .25s ease-out; }
-  .resume:hover { border-color: var(--amber); color: var(--text); }
-  .resume-i { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--amber-bg); color: var(--amber); }
-  .resume-t { display: flex; flex-direction: column; gap: 1px; font-size: 13px; }
-  .resume-t span { font-size: 12px; color: var(--muted); }
-  .resume-go { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; font-size: 13px; font-weight: 500; color: var(--amber); }
-  @keyframes resume-in { from { opacity: 0; } }
-  .main.with-resume { padding-bottom: 96px; }
-  @media (prefers-reduced-motion: reduce) { .resume { animation: none; } }
-  @media (max-width: 720px) { .resume { left: 16px; right: 16px; bottom: 16px; transform: none; } }
+  .resume { display: flex; align-items: center; gap: 10px; margin: 18px 40px -6px; padding: 10px 14px; border-radius: 10px;
+    background: var(--amber-bg); border: 1px solid var(--amber-edge); color: var(--text-2); font-size: 13px; }
+  .resume :global(.ic) { color: var(--amber); flex: none; }
+  .resume b { color: var(--text); font-weight: 500; }
+  .resume:hover { border-color: var(--amber); color: var(--text-2); }
+  .resume-go { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--amber); }
+  @media (max-width: 720px) { .resume { margin: 12px 16px 0; } }
   .meter-card { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; background: #121316; border: 1px solid #1E2024; color: var(--text); }
   .meter-card:hover { border-color: var(--line-hover); color: var(--text); }
   .meter-card .meter { margin-top: 4px; }
