@@ -5,6 +5,8 @@
   import { ago, agoPhrase, when } from '../lib/format.js';
   import Icon from '../lib/Icon.svelte';
   import Copy from '../lib/Copy.svelte';
+  import SetupCopy from '../lib/SetupCopy.svelte';
+  import { downloadDesktopExtension } from '../lib/desktop.js';
   import Modal from '../lib/Modal.svelte';
 
   let tokens = $state(null);
@@ -45,119 +47,117 @@
   const host = (() => { try { return new URL(session.base_url).host; } catch { return session.base_url; } })();
   const guide = 'https://github.com/Seafinai/artifact-buckets/blob/main/docs/public-https.md';
   const isWeb = (d) => d.app === 'claude_web';
+  // The Claude Desktop extension: made for this person on the server, downloaded as a file they open once.
+  let busy = $state(false);
+  async function desktop() {
+    busy = true;
+    try {
+      await downloadDesktopExtension();
+      toast('Downloaded. Open it to add Artifact Buckets to Claude Desktop.');
+      load();
+    } catch (e) { fail(e); } finally { busy = false; }
+  }
+  const mine = $derived(devices.filter((d) => !isWeb(d) && d.name !== 'Claude Desktop' && (!everyone || d.user === session.user.username)));
+  $effect(() => { if (mine.length) return; const id = setInterval(load, 4000); return () => clearInterval(id); });
 </script>
 
 <div class="page">
   <header class="page-head"><h1>Connect Claude</h1></header>
 
-  <section class="card setup">
-    <div class="kind"><Icon name="terminal" size={15} /><span>Claude Code</span><span class="faint">terminal, VS Code, JetBrains</span></div>
-    <div class="ways">
-      <div class="way">
-        <h2>Ask Claude Code</h2>
-        <Copy text={setup.prompt} label="the prompt" />
+  <section class="card desk">
+    <span class="di"><Icon name="download" size={18} /></span>
+    <span class="desk-t"><b>Claude desktop app</b><span>Download, open it, press Install. Made for you and this server.</span></span>
+    <button class="btn pri desk-btn" onclick={desktop} disabled={busy}><Icon name="download" />{busy ? 'Preparing…' : 'Add to Claude Desktop'}</button>
+  </section>
+
+  <section class="card hero">
+    <div class="hero-main">
+      <div class="hero-copy">
+        <span class="kind"><Icon name="terminal" size={15} />Claude Code<span class="faint">terminal, VS Code, JetBrains, and the desktop app’s Code tab</span></span>
+        <SetupCopy text={setup.prompt} primary={false} />
       </div>
-      <div class="way">
-        <div class="row" style="justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <h2>Or run one line</h2>
+      <ol class="steps3">
+        <li><span class="n">1</span><span><b>Copy</b> the setup</span></li>
+        <li><span class="n">2</span><span><b>Paste</b> it into Claude Code on your computer</span></li>
+        <li><span class="n">3</span><span>Press <b>Connect</b> on the page that opens here</span></li>
+      </ol>
+    </div>
+    <div class="live" class:ok={mine.length}>
+      {#if mine.length}
+        <Icon name="check" size={15} /><span>Connected on <b>{mine[0].name}</b>{#if mine.length > 1}{' '}and {mine.length - 1} more{/if}. Saves land in <span class="mono">{home}/projects</span>.</span>
+      {:else}
+        <span class="pulse" aria-hidden="true"></span><span>Waiting for Claude Code to connect. This updates by itself.</span>
+      {/if}
+    </div>
+  </section>
+
+  {#if web.ready}
+    <section class="card apps" id="web">
+      <span class="ai"><Icon name="sparkle" size={16} /></span>
+      <span class="apps-t"><b>Claude apps</b><span>web, desktop and phone</span></span>
+      <span class="apps-how">In Claude: <b>Settings</b>, <b>Connectors</b>, <b>Add custom connector</b>, then paste</span>
+      <span class="apps-act"><Copy text={web.url} label="the connector address" /></span>
+    </section>
+  {:else if session.isAdmin && web.why !== 'off'}
+    <section class="card apps" id="web">
+      <span class="ai"><Icon name="sparkle" size={16} /></span>
+      <span class="apps-t"><b>Claude apps</b><span>web, desktop and phone</span></span>
+      <span class="apps-how">Optional. To use these too, this server needs an address that works from the internet. Only you see this.</span>
+      <a class="btn sm" href={guide} target="_blank" rel="noopener"><Icon name="external" size={14} />Ways to set it up</a>
+    </section>
+  {/if}
+
+  <details class="card adv">
+    <summary>Advanced</summary>
+    <div class="adv-body">
+      <div class="adv-sec">
+        <div class="adv-h"><h3>From a terminal</h3>
           <div class="segs" role="group" aria-label="Your computer">
             <button class="seg" class:on={os === 'windows'} onclick={() => (os = 'windows')}>Windows</button>
             <button class="seg" class:on={os === 'unix'} onclick={() => (os = 'unix')}>macOS and Linux</button>
           </div>
         </div>
         <Copy text={os === 'windows' ? setup.windows : setup.unix} label="the setup command" />
+        {#if setup.fingerprint}<p class="fp">This server’s certificate, checked by setup before anything is trusted: <span class="mono">{setup.fingerprint.match(/.{1,4}/g).join(' ')}</span></p>{/if}
       </div>
-    </div>
-    <ol class="flow">
-      <li><Icon name="terminal" size={15} /><span>Paste it {os === 'windows' ? 'into Claude Code or PowerShell' : 'into Claude Code or a terminal'}</span></li>
-      <li><Icon name="check" size={15} /><span>Press <b>Connect</b> on the page that opens here</span></li>
-      <li><Icon name="folder" size={15} /><span>Saves land in <span class="mono">{home}/projects</span></span></li>
-    </ol>
-    {#if setup.fingerprint}<p class="fp" title="The setup line checks the server's certificate against this before trusting it">Certificate SHA-256 <span class="mono">{setup.fingerprint.match(/.{1,4}/g).join(' ')}</span></p>{/if}
-  </section>
-
-  <section class="card web" id="web">
-    <div class="kind"><Icon name="sparkle" size={15} /><span>Claude apps</span><span class="faint">web, desktop and mobile</span></div>
-    {#if web.ready}
-      <div class="web-body">
-        <div class="web-copy">
-          <h2>Add it as a connector</h2>
-          <p class="note">Claude can then save what it makes into your folders, and open files from them, in any chat.</p>
-          <Copy text={web.url} label="the connector address" />
+      <div class="adv-sec">
+        <h3>The setup message</h3>
+        <Copy text={setup.prompt} label="the setup message" />
+      </div>
+      <div class="adv-sec">
+        <h3>Remove it from a computer</h3>
+        <Copy text={os === 'windows' ? setup.uninstall_windows : setup.uninstall_unix} label="the remove command" />
+        <p class="note">Files already saved stay in your folders.</p>
+      </div>
+      {#if session.isAdmin}
+        <div class="adv-sec">
+          <div class="adv-h"><h3>Every computer at once <span class="faint">Intune, Group Policy, Jamf</span></h3>
+            <a class="btn sm" href="/claude/managed-settings.json" download="managed-settings.json"><Icon name="download" size={14} />Policy file</a></div>
+          <dl class="where">
+            <dt>Windows</dt><dd class="mono">C:\Program Files\ClaudeCode\managed-settings.json</dd>
+            <dt>Group Policy or Intune</dt><dd>The same JSON as the <span class="mono">Settings</span> value under <span class="mono">HKLM\SOFTWARE\Policies\ClaudeCode</span></dd>
+            <dt>macOS</dt><dd class="mono">/Library/Application Support/ClaudeCode/managed-settings.json</dd>
+            <dt>Linux</dt><dd class="mono">/etc/claude-code/managed-settings.json</dd>
+          </dl>
         </div>
-        <ol class="steps">
-          <li><span class="n">1</span><span>In Claude, open <b>Settings</b>, then <b>Connectors</b>, and choose <b>Add custom connector</b></span></li>
-          <li><span class="n">2</span><span>Name it <b>Artifact Buckets</b> and paste the address</span></li>
-          <li><span class="n">3</span><span>Press <b>Connect</b> there, then <b>Connect</b> on the page that opens here</span></li>
-        </ol>
+      {/if}
+      <div class="adv-sec">
+        <div class="adv-h"><h3>Personal tokens <span class="faint">for build servers and scripts</span></h3>
+          <span class="row" style="gap:8px">
+            {#if session.isAdmin}<button class="btn sm" onclick={() => { everyone = true; load(); }}><Icon name="users" size={14} />Everyone’s connections</button>{/if}
+            <button class="btn sm" onclick={() => { form = { name: '', scope: 'write', folders: '', days: 30 }; dialog = 'new'; }}><Icon name="key" size={14} />New token</button>
+          </span></div>
       </div>
-      <p class="web-foot">On a Team or Enterprise plan, an owner adds the connector once under <b>Organization settings</b>, then <b>Connectors</b>. Each person then connects with their own account.</p>
-    {:else}
-      <div class="web-body blocked">
-        <span class="bi"><Icon name="lock" size={16} /></span>
-        <div class="web-copy">
-          {#if web.why === 'off'}
-            <h2>Turned off on this server</h2>
-            <p class="note">An admin can turn it back on by removing <span class="mono">AB_CLAUDE_WEB=false</span> from the server’s settings.</p>
-          {:else}
-            <h2>Needs a public address first</h2>
-            <p class="note">Claude’s apps reach connectors from the internet, so this server needs a public https address with a trusted certificate.
-              {#if web.why === 'self_signed'}<span class="mono">{host}</span> uses a self-signed certificate, which Claude won’t trust.
-              {:else}<span class="mono">{host}</span> is only reachable on your own network.{/if}
-              A Cloudflare Tunnel gives it one in a few minutes, with no ports to open.</p>
-            {#if session.isAdmin}<a class="btn" href={guide} target="_blank" rel="noopener" style="align-self:flex-start"><Icon name="external" size={14} />Set up a public address</a>
-            {:else}<p class="note" style="margin:0">Ask whoever runs Artifact Buckets to set one up.</p>{/if}
-          {/if}
-        </div>
+      <div class="adv-sec">
+        <h3>By hand</h3>
+        <Copy text={`claude plugin marketplace add ${setup.marketplace}`} />
+        <Copy text={`claude plugin install ${setup.plugin}`} />
+        <p class="note">Then in Claude Code: <code>/mcp</code>, <b>artifact-buckets</b>, <b>Authenticate</b>.</p>
       </div>
-    {/if}
-  </section>
-
-  <details class="card alt" id="remove">
-    <summary>Removing it from a computer</summary>
-    <div class="rm">
-      <p class="note">Takes the plugin, the sync and the certificate setting off that computer, and turns its connection off here. Files already saved stay in your folders.</p>
-      <div class="segs os" role="group" aria-label="Your computer">
-        <button class="seg" class:on={os === 'windows'} onclick={() => (os = 'windows')}>Windows</button>
-        <button class="seg" class:on={os === 'unix'} onclick={() => (os = 'unix')}>macOS and Linux</button>
-      </div>
-      <Copy text={os === 'windows' ? setup.uninstall_windows : setup.uninstall_unix} label="the remove command" />
-      <p class="note">Or ask Claude Code: <span class="mono">{setup.remove_prompt}</span></p>
     </div>
   </details>
 
-  {#if session.isAdmin}
-    <details class="card alt rollout" id="rollout">
-      <summary>Set up every computer at once <span class="faint">Intune, Group Policy, Jamf</span></summary>
-      <div class="ro-body">
-        <div class="row" style="justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <span class="note">Claude Code installs the plugin at its next start; people sign in once when it asks.</span>
-          <a class="btn sm" href="/claude/managed-settings.json" download="managed-settings.json"><Icon name="download" size={14} />Download</a>
-        </div>
-        <pre class="mono policy">{JSON.stringify(setup.managed_settings, null, 2)}</pre>
-        <dl class="where">
-          <dt>Windows</dt><dd class="mono">C:\Program Files\ClaudeCode\managed-settings.json</dd>
-          <dt>Group Policy or Intune</dt><dd>The same JSON as the <span class="mono">Settings</span> value under <span class="mono">HKLM\SOFTWARE\Policies\ClaudeCode</span></dd>
-          <dt>macOS</dt><dd class="mono">/Library/Application Support/ClaudeCode/managed-settings.json</dd>
-          <dt>Linux</dt><dd class="mono">/etc/claude-code/managed-settings.json</dd>
-        </dl>
-        {#if setup.private_ca}<p class="note" style="margin:0">Computers must trust this server’s certificate first; domain-joined PCs already trust one from your own certificate authority.</p>{/if}
-      </div>
-    </details>
-  {/if}
-
-  <details class="card alt">
-    <summary>Set it up by hand</summary>
-    <div style="display:flex;flex-direction:column;gap:10px;padding-top:12px">
-      <p class="note" style="margin:0">With the plugin (the connection, plus skills that teach Claude your folders):</p>
-      <Copy text={`claude plugin marketplace add ${setup.marketplace}`} />
-      <Copy text={`claude plugin install ${setup.plugin}`} />
-      <p class="note" style="margin:6px 0 0">Or only the connection:</p>
-      <Copy text={`claude mcp add --transport http artifact-buckets ${mcpUrl}`} />
-      <p class="note" style="margin:0">Then sign in with <code>/mcp</code> in Claude Code, choose <b>artifact-buckets</b> and <b>Authenticate</b>.</p>
-    </div>
-  </details>
-
+  {#if devices.length || everyone}
   <section class="card">
     <div class="hd">
       <h2>{everyone ? 'Everyone’s connections' : 'Your connections'}</h2>
@@ -181,6 +181,9 @@
     {/if}
   </section>
 
+  {/if}
+
+  {#if syncers.length}
   <section class="card" id="sync">
     <div class="hd">
       <h2>{everyone ? 'Everyone’s computers that sync' : 'Computers that sync'}</h2>
@@ -202,6 +205,9 @@
     {/if}
   </section>
 
+  {/if}
+
+  {#if personal.length}
   <section class="card">
     <div class="hd">
       <div style="display:flex;flex-direction:column;gap:4px"><h2>Personal tokens</h2><span class="note">For build servers and scripts that can't open a browser</span></div>
@@ -225,6 +231,7 @@
       </table></div>
     {:else if tokens}<div class="empty">No personal tokens.</div>{/if}
   </section>
+  {/if}
 </div>
 
 {#if dialog === 'new'}
@@ -256,49 +263,56 @@
 {/if}
 
 <style>
-  .setup, .web { padding: 0; overflow: hidden; }
-  .kind { display: flex; align-items: center; gap: 9px; padding: 12px 24px; border-bottom: 1px solid var(--line); font-size: 12.5px; font-weight: 500; color: var(--text-2); }
+  .desk { display: flex; align-items: center; gap: 16px; padding: 18px 22px; flex-wrap: wrap; }
+  .di { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: var(--amber-bg); color: var(--amber); flex: none; }
+  .desk-t { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+  .desk-t b { font-weight: 600; }
+  .desk-t span { font-size: 13px; color: var(--text-2); }
+  .desk-btn { height: 42px; padding: 0 18px; font-size: 14px; border-radius: 10px; }
+  .hero { padding: 0; overflow: hidden; }
+  .hero-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; padding: 26px 28px; align-items: center; }
+  .hero-copy { display: flex; flex-direction: column; gap: 18px; }
+  .kind { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 500; color: var(--text); }
   .kind :global(.ic) { color: var(--amber); }
-  .kind .faint { font-weight: 400; color: var(--faint); }
-  .web-body { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; padding: 22px 24px; align-items: start; }
+  .kind .faint { color: var(--faint); font-weight: 400; }
+  .steps3 { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+  .steps3 li { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--text-2); }
+  .steps3 b { color: var(--text); font-weight: 500; }
+  .steps3 .n { width: 24px; height: 24px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600;
+    color: var(--amber); background: var(--amber-bg); font-variant-numeric: tabular-nums; }
+  .live { display: flex; align-items: center; gap: 10px; padding: 13px 28px; border-top: 1px solid var(--line); background: var(--bg-side); font-size: 13px; color: var(--text-2); }
+  .live.ok { color: var(--text); }
+  .live.ok :global(.ic) { color: var(--green); }
+  .live b { font-weight: 500; }
+  .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+  @media (max-width: 820px) { .hero-main { grid-template-columns: minmax(0, 1fr); } }
+  .apps { display: flex; align-items: center; gap: 14px; padding: 14px 18px; flex-wrap: wrap; }
+  .ai { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--raise); color: var(--amber); flex: none; }
+  .apps-t { display: flex; flex-direction: column; gap: 1px; font-size: 13.5px; }
+  .apps-t b { font-weight: 500; }
+  .apps-t span { font-size: 12px; color: var(--faint); }
+  .apps-how { flex: 1; min-width: 200px; font-size: 13px; color: var(--text-2); }
+  .apps-how b { font-weight: 500; color: var(--text); }
+  .apps-act { flex: 1 1 320px; min-width: 0; }
+  .adv { padding: 16px 22px; }
+  .adv summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-2); }
+  .adv-body { display: flex; flex-direction: column; gap: 22px; padding-top: 18px; }
+  .adv-sec { display: flex; flex-direction: column; gap: 10px; }
+  .adv-sec h3 { margin: 0; font-size: 13px; font-weight: 500; color: var(--text); }
+  .adv-sec h3 .faint { color: var(--faint); font-weight: 400; margin-left: 6px; }
+  .adv-sec p { margin: 0; }
+  .adv-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   @media (max-width: 860px) { .web-body { grid-template-columns: 1fr; gap: 18px; } }
-  .web-copy { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  .web-copy h2 { margin: 0; }
-  .web-copy .note { margin: 0; }
-  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; color: var(--text-2); }
-  .steps li { display: flex; gap: 12px; align-items: flex-start; }
-  .steps b { color: var(--text); font-weight: 500; }
-  .steps .n { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11.5px; font-weight: 600; color: var(--amber); background: var(--amber-bg); border: 1px solid var(--amber-edge); }
-  .web-foot { margin: 0; padding: 12px 24px; border-top: 1px solid var(--line); background: var(--bg-side); font-size: 12.5px; color: var(--muted); line-height: 1.55; }
-  .web-foot b { color: var(--text-2); font-weight: 500; }
-  .blocked { grid-template-columns: auto minmax(0, 1fr); gap: 16px; }
-  .bi { width: 34px; height: 34px; border-radius: 9px; background: var(--raise); color: var(--text-2); display: grid; place-items: center; }
-  .blocked .mono { font-size: 12px; color: var(--text-2); }
-  .ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-  .way { padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-  .way > h2, .way > .row { min-height: 34px; display: flex; align-items: center; }
   .card > .empty { padding: 26px 22px; }
-  .way + .way { border-left: 1px solid var(--line); }
-  @media (max-width: 760px) { .way + .way { border-left: 0; border-top: 1px solid var(--line); } }
-  .flow { list-style: none; margin: 0; padding: 14px 24px; display: flex; flex-wrap: wrap; gap: 10px 28px; border-top: 1px solid var(--line); background: var(--bg-side); font-size: 13px; color: var(--text-2); }
-  .flow li { display: flex; align-items: center; gap: 9px; }
-  .flow :global(.ic) { color: var(--amber); }
-  .flow b { color: var(--text); font-weight: 500; }
   .fp { margin: 0; padding: 0 24px 14px; background: var(--bg-side); font-size: 11.5px; color: var(--faint); }
   .fp .mono { letter-spacing: .02em; overflow-wrap: anywhere; }
-  .rollout summary .faint { font-weight: 400; margin-left: 8px; color: var(--faint); }
-  .ro-body { padding-top: 16px; display: flex; flex-direction: column; gap: 16px; }
-  .alt { padding: 16px 22px; }
-  .alt summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-2); }
   .hd { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 22px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   .dev { display: flex; align-items: center; gap: 14px; padding: 14px 22px; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
   .dev:last-child { border-bottom: 0; }
   .dvi { width: 34px; height: 34px; border-radius: 9px; background: var(--raise); color: var(--text-2); display: grid; place-items: center; }
   .warn { color: var(--amber); }
-  .rm { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
-  .rm p { margin: 0; }
-  .rm .mono { overflow-wrap: anywhere; font-size: 12px; }
-  .policy { margin: 0; padding: 14px 16px; border-radius: 10px; background: #0F1012; border: 1px solid var(--line); font-size: 12.5px; line-height: 1.55; color: var(--text); overflow-x: auto; }
   .where { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 0; font-size: 13px; }
   .where dt { color: var(--text-2); }
   .where dd { margin: 0; overflow-wrap: anywhere; }

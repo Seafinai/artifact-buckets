@@ -8,12 +8,14 @@
   import Logo from '../lib/Logo.svelte';
   import Icon from '../lib/Icon.svelte';
   import Copy from '../lib/Copy.svelte';
+  import SetupCopy from '../lib/SetupCopy.svelte';
+  import { downloadDesktopExtension } from '../lib/desktop.js';
   import ChangePassword from '../lib/ChangePassword.svelte';
 
   const STEPS = [
     { key: 'hello', label: 'Welcome' },
     ...(session.isAdmin ? [{ key: 'team', label: 'Set up your team' }] : []),
-    { key: 'connect', label: 'Connect Claude Code' },
+    { key: 'connect', label: 'Connect Claude' },
     { key: 'work', label: 'Bring in your work' },
     { key: 'land', label: 'Where things land' },
   ];
@@ -62,6 +64,8 @@
     navigate(to, true);
   }
   const short = (p) => p.slice(home.length + 1);
+  let busy = $state(false);
+  async function desktop() { busy = true; try { await downloadDesktopExtension(); refresh(); } catch { /* the Connect page shows the error */ } finally { busy = false; } }
 </script>
 
 {#if pwOpen}<ChangePassword onclose={() => (pwOpen = false)} />{/if}
@@ -131,22 +135,32 @@
           </div>
 
         {:else if cur === 'connect'}
-          <h1>Connect Claude Code</h1>
-          <p class="lede">Paste this into Claude Code on your computer. It sets everything up, then opens one page here where you choose which of Claude’s existing files to bring in and press <b>Connect</b>. That’s the only click.</p>
-          <Copy text={setup.prompt} label="the prompt" />
-          <p class="note">Rather not use Claude for it? The same steps are one line for {os === 'windows' ? 'PowerShell' : 'a terminal'}, below.{#if setup.private_ca}{' '}This server has its own certificate, so your browser may warn the first time; the setup line checks that certificate before trusting the server.{/if}</p>
-          <div class="segs os" role="group" aria-label="Your computer">
-            <button class="seg" class:on={os === 'windows'} onclick={() => (os = 'windows')}>Windows</button>
-            <button class="seg" class:on={os === 'unix'} onclick={() => (os = 'unix')}>macOS and Linux</button>
+          <h1>Connect Claude</h1>
+          <div class="pick">
+            <div class="pick-row">
+              <span class="pick-t"><b>Claude desktop app</b><span>Download, open it, press Install.</span></span>
+              <button class="btn pri big" onclick={desktop} disabled={busy}><Icon name="download" />{busy ? 'Preparing…' : 'Add to Claude Desktop'}</button>
+            </div>
+            <div class="pick-row">
+              <span class="pick-t"><b>Claude Code</b><span>Paste it into Claude Code, then press <b>Connect</b> on the page that opens.</span></span>
+              <SetupCopy text={setup.prompt} primary={false} />
+            </div>
           </div>
-          <Copy text={os === 'windows' ? setup.windows : setup.unix} label="the setup command" />
+          <details class="term">
+            <summary>Prefer a terminal?</summary>
+            <div class="segs os" role="group" aria-label="Your computer">
+              <button class="seg" class:on={os === 'windows'} onclick={() => (os = 'windows')}>Windows</button>
+              <button class="seg" class:on={os === 'unix'} onclick={() => (os = 'unix')}>macOS and Linux</button>
+            </div>
+            <Copy text={os === 'windows' ? setup.windows : setup.unix} label="the setup command" />
+          </details>
           <div class="live" class:ok={connected}>
             {#if connected}
               <span class="lv-i"><Icon name="check" /></span>
               <span><b>Connected.</b> {devices[0].name}, {agoPhrase(devices[0].created_at)}.{#if devices.length > 1} And {devices.length - 1} more.{/if}</span>
             {:else}
               <span class="pulse" aria-hidden="true"></span>
-              <span>Waiting for Claude Code to sign in… this updates by itself.</span>
+              <span>Waiting for Claude to connect. This updates by itself.</span>
             {/if}
           </div>
 
@@ -321,4 +335,16 @@
     .td-go { font-size: 0; gap: 0; margin-top: 4px; }
     .top { padding: 16px; }
   }
+  .term { font-size: 13px; color: var(--text-2); }
+  .term summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  .term[open] { display: flex; flex-direction: column; gap: 10px; }
+  .term[open] summary { margin-bottom: 2px; }
+  .pick { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .pick-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; flex-wrap: wrap; }
+  .pick-row + .pick-row { border-top: 1px solid var(--line); }
+  .pick-t { display: flex; flex-direction: column; gap: 3px; font-size: 14px; min-width: 200px; flex: 1; }
+  .pick-t b { font-weight: 500; }
+  .pick-t span { font-size: 13px; color: var(--text-2); }
+  .pick-t span b { color: var(--text); }
+  .big { height: 42px; padding: 0 18px; font-size: 14px; border-radius: 10px; }
 </style>
