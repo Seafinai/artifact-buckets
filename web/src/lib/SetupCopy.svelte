@@ -1,7 +1,7 @@
 <script>
   // One button that copies the Claude Code setup message. The message itself (server address, and for a server
   // with its own certificate the fingerprint the setup checks) stays out of the way until someone asks to see it,
-  // or the browser won't let us copy.
+  // and is shown here only when the browser won't let us copy (the Connect page lists it under Advanced).
   import Icon from './Icon.svelte';
   import Copy from './Copy.svelte';
   let { text } = $props();
@@ -18,7 +18,6 @@
     <button class="btn pri big" onclick={copy}><Icon name={done ? 'check' : 'copy'} />{done ? 'Copied' : 'Copy setup for Claude Code'}</button>
     {#if done}<span class="hint">Now paste it into Claude Code.</span>{/if}
   </div>
-  <button class="lnk" onclick={() => (show = !show)} aria-expanded={show}>{show ? 'Hide the message' : 'Show the message'}</button>
   {#if show}<Copy text={text} label="the setup message" />{/if}
 </div>
 
@@ -27,8 +26,5 @@
   .row-main { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .big { height: 42px; padding: 0 18px; font-size: 14px; border-radius: 10px; }
   .hint { font-size: 13px; color: var(--text-2); }
-  .lnk { all: unset; cursor: pointer; font-size: 12px; color: var(--muted); }
-  .lnk:hover { color: var(--text); }
-  .lnk:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 4px; }
   .sc :global(.cp) { align-self: stretch; }
 </style>
