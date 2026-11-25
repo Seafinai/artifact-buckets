@@ -166,7 +166,7 @@
         </div>
       </div>
     </aside>
-    <main class="main">
+    <main class="main" class:with-resume={session.welcome}>
       {#if page && allowed}
         {#key route.path}<Page />{/key}
       {:else if page}
@@ -210,6 +210,7 @@
   .resume-t span { font-size: 12px; color: var(--muted); }
   .resume-go { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; font-size: 13px; font-weight: 500; color: var(--amber); }
   @keyframes resume-in { from { opacity: 0; } }
+  .main.with-resume { padding-bottom: 96px; }
   @media (prefers-reduced-motion: reduce) { .resume { animation: none; } }
   @media (max-width: 720px) { .resume { left: 16px; right: 16px; bottom: 16px; transform: none; } }
   .meter-card { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; background: #121316; border: 1px solid #1E2024; color: var(--text); }
