@@ -92,7 +92,7 @@ def test_private_ca_setup_lines_come_from_github_and_carry_the_fingerprint(env, 
     assert me["windows"] == f"& ([scriptblock]::Create((irm {gh}/connect.ps1))) {srv} {sha}"
     assert me["uninstall_unix"] == f"curl -fsSL {gh}/connect.sh | sh -s -- {srv} {sha} remove"
     assert me["uninstall_windows"].endswith(f"{srv} {sha} remove")
-    assert me["prompt"] == f"Set up Artifact Buckets on this computer by following {gh}/README.md for the server {srv} with certificate fingerprint {sha}"
+    assert f"Set up Artifact Buckets on this computer by following {gh}/README.md for the server {srv} with certificate fingerprint {sha}" in me["prompt"]
     assert me["remove_prompt"].startswith("Remove Artifact Buckets") and sha in me["remove_prompt"]
     for line in (me["unix"], me["windows"], me["uninstall_unix"], me["uninstall_windows"], me["prompt"], me["remove_prompt"]):
         assert "http://" not in line
@@ -139,5 +139,6 @@ def test_setup_page_for_claude(env, monkeypatch, tmp_path):
     assert "claude plugin marketplace add http://testserver/claude/marketplace.json" in t
     assert "claude mcp login plugin:artifact-buckets:artifact-buckets" in t
     assert "certificate" not in t.split("## 1.")[1].split("\n")[0].lower()  # no trust step with a public certificate
-    assert c.get("/api/auth/me").json()["claude"]["prompt"] == \
-        "Set up Artifact Buckets on this computer by following http://boot.example:8090/claude/setup.md"
+    prompt = c.get("/api/auth/me").json()["claude"]["prompt"]
+    assert prompt.startswith("For Claude Code. Set up Artifact Buckets on this computer by following http://boot.example:8090/claude/setup.md")
+    assert "If you can't run commands here" in prompt

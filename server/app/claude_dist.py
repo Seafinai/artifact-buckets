@@ -119,6 +119,13 @@ def managed_settings() -> dict[str, Any]:
     }
 
 
+# Pasted into a Claude that can't run commands (a chat, not Claude Code), the message asks for one short answer.
+PROMPT_HEAD = "For Claude Code. "
+PROMPT_TAIL = (". If you can't run commands here, don't explain the steps: reply only that this needs Claude Code "
+               "(a terminal, or the Code tab in the Claude desktop app), or the Add to Claude Desktop button on the "
+               "Artifact Buckets Connect page.")
+
+
 def connect_lines(pin: str) -> dict[str, str]:
     """The setup and removal lines for a server with a self-signed certificate: a connect script from connect_url
     (public HTTPS), given this server's address and the certificate's SHA-256 fingerprint to check it against."""
@@ -129,7 +136,7 @@ def connect_lines(pin: str) -> dict[str, str]:
         "unix": f"curl -fsSL {cu}/connect.sh | sh -s -- {base} {pin}",
         "uninstall_windows": f"& ([scriptblock]::Create((irm {cu}/connect.ps1))) {base} {pin} remove",
         "uninstall_unix": f"curl -fsSL {cu}/connect.sh | sh -s -- {base} {pin} remove",
-        "prompt": f"Set up Artifact Buckets on this computer by following {guide}",
+        "prompt": f"{PROMPT_HEAD}Set up Artifact Buckets on this computer by following {guide}{PROMPT_TAIL}",
         "remove_prompt": f"Remove Artifact Buckets from this computer by following {guide}",
     }
 
@@ -140,7 +147,7 @@ def setup_info() -> dict[str, Any]:
     c = _ca()
     info = {
         "windows": f"irm {b}/claude/install.ps1 | iex",
-        "prompt": f"Set up Artifact Buckets on this computer by following {b}/claude/setup.md",
+        "prompt": f"{PROMPT_HEAD}Set up Artifact Buckets on this computer by following {b}/claude/setup.md{PROMPT_TAIL}",
         "unix": f"curl -fsSL {b}/claude/install.sh | sh",
         "uninstall_windows": f"irm {b}/claude/uninstall.ps1 | iex",
         "uninstall_unix": f"curl -fsSL {b}/claude/uninstall.sh | sh",
@@ -517,9 +524,14 @@ if ($CaSha) {
   Step "Server certificate checked"
 }
 
+# The plugin's source is this server. One left from a different server (a computer moved to a new server) is
+# replaced, so the plugin, its connection and its skills all point here.
 $known = (claude plugin marketplace list 2>&1 | Out-String)
-if ($known -match '{{MARKETPLACE}}') { claude plugin marketplace update {{MARKETPLACE}} 2>&1 | Out-Null }
-else { claude plugin marketplace add '{{MARKETPLACE_URL}}' 2>&1 | Out-Null }
+if ($known -match '{{MARKETPLACE}}' -and $known.Contains('{{MARKETPLACE_URL}}')) { claude plugin marketplace update {{MARKETPLACE}} 2>&1 | Out-Null }
+else {
+  if ($known -match '{{MARKETPLACE}}') { claude plugin marketplace remove {{MARKETPLACE}} 2>&1 | Out-Null }
+  claude plugin marketplace add '{{MARKETPLACE_URL}}' 2>&1 | Out-Null
+}
 if ($LASTEXITCODE -ne 0) { Stop-Setup "Couldn't reach $Server from Claude Code. Check the address opens in your browser, then run this again."; return }
 claude plugin install {{PLUGIN}} 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { Stop-Setup "Couldn't install the plugin. Run: claude plugin install {{PLUGIN}}  to see why."; return }
@@ -645,9 +657,13 @@ if [ -n "$CA_SHA" ]; then
   say "Server certificate checked"
 fi
 
-if claude plugin marketplace list 2>/dev/null | grep -q '{{MARKETPLACE}}'; then
+# The plugin's source is this server. One left from a different server (a computer moved to a new server) is
+# replaced, so the plugin, its connection and its skills all point here.
+known=$(claude plugin marketplace list 2>/dev/null || true)
+if printf '%s' "$known" | grep -q '{{MARKETPLACE}}' && printf '%s' "$known" | grep -qF '{{MARKETPLACE_URL}}'; then
   claude plugin marketplace update {{MARKETPLACE}} >/dev/null 2>&1 || quit "Couldn't reach $SERVER from Claude Code."
 else
+  if printf '%s' "$known" | grep -q '{{MARKETPLACE}}'; then claude plugin marketplace remove {{MARKETPLACE}} >/dev/null 2>&1 || true; fi
   claude plugin marketplace add '{{MARKETPLACE_URL}}' >/dev/null 2>&1 || quit "Couldn't reach $SERVER from Claude Code. Check the address opens in your browser, then run this again."
 fi
 claude plugin install {{PLUGIN}} >/dev/null 2>&1 || quit "Couldn't install the plugin. Run: claude plugin install {{PLUGIN}}  to see why."

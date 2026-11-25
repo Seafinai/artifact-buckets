@@ -181,5 +181,5 @@ rl.on('line', (line) => {
     }
   });
 });
-rl.on('close', () => process.exit(0));
+rl.on('close', () => { chain.then(() => process.exit(0)); });
 """

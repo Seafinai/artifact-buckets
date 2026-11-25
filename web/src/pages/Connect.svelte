@@ -60,7 +60,7 @@
       load();
     } catch (e) { fail(e); } finally { busy = false; }
   }
-  const mine = $derived(devices.filter((d) => !isWeb(d) && (!everyone || d.user === session.user.username)));
+  const mine = $derived(devices.filter((d) => !isWeb(d) && d.name !== 'Claude Desktop' && (!everyone || d.user === session.user.username)));
   $effect(() => { if (mine.length) return; const id = setInterval(load, 4000); return () => clearInterval(id); });
 </script>
 
