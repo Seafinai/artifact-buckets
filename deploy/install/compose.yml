@@ -52,6 +52,22 @@ services:
     depends_on:
       db: { condition: service_healthy }
 
+  # Only with a Cloudflare Tunnel (sudo artifact-buckets tunnel): gives the app a public https address, which
+  # Claude's web, desktop and mobile apps need, without opening any port. Off unless COMPOSE_PROFILES has "tunnel".
+  cloudflared:
+    profiles: [tunnel]
+    image: cloudflare/cloudflared:2026.10.7
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    # The token sits in its own file (mode 600), so the app never sees it.
+    env_file:
+      - path: ./tunnel.env
+        required: false
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on: [app]
+
   db:
     image: postgres:17
     restart: unless-stopped

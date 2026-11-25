@@ -153,7 +153,33 @@ def setup_info() -> dict[str, Any]:
     }
     if c:
         info.update(connect_lines(c[1]))
+    info["web"] = web_info(private_ca=c is not None)
     return info
+
+
+def web_info(private_ca: bool) -> dict[str, Any]:
+    """Claude on the web, desktop and mobile connect from Anthropic's servers, so they need this server at a public
+    https address with a certificate from a public authority. Say why not, when we can tell it won't work."""
+    import ipaddress
+    from urllib.parse import urlparse
+    base = config.settings.base_url
+    u = urlparse(base)
+    host = (u.hostname or "").lower()
+    why = None
+    if not config.settings.claude_web:
+        why = "off"
+    elif u.scheme != "https":
+        why = "http"
+    else:
+        try:
+            ip = ipaddress.ip_address(host)
+            why = "ip" if not ip.is_global else None
+        except ValueError:
+            if "." not in host or host.endswith((".local", ".lan", ".internal", ".home.arpa", ".localdomain", ".corp")):
+                why = "private_name"
+        if why is None and private_ca:
+            why = "self_signed"
+    return {"url": f"{base}/mcp", "ready": why is None, "why": why}
 
 
 def _plain_http(request: Request) -> Response | None:

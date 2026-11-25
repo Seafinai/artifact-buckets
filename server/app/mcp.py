@@ -20,18 +20,21 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from . import accounts, audit, config, directory, fs, paths, routing, storage
+from . import accounts, audit, config, directory, filexfer, fs, paths, routing, storage
 from .db import Audit, Folder, Group, Token, User, Volume, new_session, utcnow
 from .errors import AppError, BadRequest, Conflict, Forbidden, NotFound
 from .perms import Actor, at_least, role_for
 from .security import resolve_token
 
 router = APIRouter()
-SUPPORTED_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
+# The first is what an unknown version is answered with. 2026-07-28 brings the files extension (filexfer.py).
+SUPPORTED_VERSIONS = ("2025-11-25", "2026-07-28", "2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "artifact-buckets", "title": "Artifact Buckets", "version": "0.1.0"}
-INSTRUCTIONS = ("Artifact Buckets stores the artifacts people make with Claude Code. Use save_artifact to keep a "
-                "finished file; pass project and git_remote so it is routed to the right folder. Use list_folder, "
-                "search_artifacts and get_artifact to find earlier work. Deletes go to a 30-day trash.")
+INSTRUCTIONS = ("Artifact Buckets is the team's own file store for work made with Claude. Use save_artifact to keep a "
+                "finished text file you wrote; pass project and git_remote so it is routed to the right folder. When "
+                "save_file is available, use it for a file the person attached or one you made as a file (documents, "
+                "slides, spreadsheets, images, PDFs). Use list_folder, search_artifacts and get_artifact to find earlier "
+                "work, and download_file to hand someone a copy. Deletes go to a 30-day trash.")
 
 S = "string"
 STR = {"type": S}
@@ -153,6 +156,19 @@ def _volume(db: Session, name: str) -> Volume:
     return v
 
 
+def check_if_version(db: Session, path: str, version: int) -> None:
+    """A save that names the version it started from is refused if someone saved a newer one meanwhile."""
+    cur = fs.file_row(db, path)
+    if cur is None:
+        raise Conflict(f"{path} no longer exists: it was moved, renamed or deleted after you opened it. "
+                       "Search for it to find where it went, or save under a new name.")
+    if cur.version != version:
+        saver = db.get(User, cur.saved_by) if cur.saved_by else None
+        raise Conflict(f"{path} changed since you opened it: it is now version {cur.version}"
+                       f"{' (saved by ' + (saver.display_name or saver.username) + ')' if saver else ''}. "
+                       "Open it again and reapply your change, or save under a new name.")
+
+
 def call(db: Session, actor: Actor, name: str, a: dict[str, Any]) -> Any:
     if name not in visible_tools(actor):
         audit.log(db, actor, "access.denied", name, ok=False, reason="tool not available")
@@ -180,15 +196,7 @@ def call(db: Session, actor: Actor, name: str, a: dict[str, Any]) -> Any:
             folder, reason = routing.resolve(db, actor, folder=a.get("folder"), project=a.get("project"), git_remote=a.get("git_remote"))
             path = paths.join(folder, a["name"])
         if a.get("if_version") is not None:
-            cur = fs.file_row(db, path)
-            if cur is None:
-                raise Conflict(f"{path} no longer exists: it was moved, renamed or deleted after you opened it. "
-                               "Search for it to find where it went, or save under a new name.")
-            if cur.version != a["if_version"]:
-                saver = db.get(User, cur.saved_by) if cur.saved_by else None
-                raise Conflict(f"{path} changed since you opened it: it is now version {cur.version}"
-                               f"{' (saved by ' + (saver.display_name or saver.username) + ')' if saver else ''}. "
-                               "Open it again and reapply your change, or save under a new name.")
+            check_if_version(db, path, a["if_version"])
         meta = fs.SaveMeta(source="mcp", project=a.get("project"), git_remote=routing.normalize_remote(a.get("git_remote")),
                            git_commit=a.get("git_commit"), session_id=a.get("session_id"), tags=a.get("tags"))
         res = fs.save_file(db, actor, path, data, meta)
@@ -340,7 +348,11 @@ def audit_query(db: Session, *, action: str | None = None, user: str | None = No
 def token_info(db: Session, t: Token) -> dict[str, Any]:
     u = db.get(User, t.user_id)
     kind = "device" if t.kind.startswith("oauth") else ("sync" if t.kind == "sync" else "personal")
-    return {"id": t.id, "name": t.name, "kind": kind,
+    from .db import OAuthClient
+    from .oauth import is_claude_web
+    client = db.get(OAuthClient, t.client_id) if t.client_id else None
+    app = "claude_web" if client is not None and client.redirect_uris and all(is_claude_web(u) for u in client.redirect_uris) else None
+    return {"id": t.id, "name": t.name, "kind": kind, "app": app,
             "hint": t.hint, "user": u.username if u else None, "scope": t.scope, "folders": t.folders,
             "created_at": t.created_at.isoformat() + "Z",
             "last_used": t.last_used.isoformat() + "Z" if t.last_used else None,
@@ -403,21 +415,34 @@ def handle_message(db: Session, actor: Actor, msg: dict[str, Any]) -> dict[str, 
         want = params.get("protocolVersion")
         ver = want if want in SUPPORTED_VERSIONS else SUPPORTED_VERSIONS[0]
         return {"jsonrpc": "2.0", "id": id_, "result": {"protocolVersion": ver,
-                "capabilities": {"tools": {"listChanged": False}}, "serverInfo": SERVER_INFO, "instructions": INSTRUCTIONS}}
+                "capabilities": _capabilities(), "serverInfo": SERVER_INFO, "instructions": INSTRUCTIONS}}
+    if method == "server/discover":
+        return {"jsonrpc": "2.0", "id": id_, "result": discover()}
     if method == "ping":
         return {"jsonrpc": "2.0", "id": id_, "result": {}}
     if method == "tools/list":
-        return {"jsonrpc": "2.0", "id": id_, "result": {"tools": [_tool_def(n) for n in visible_tools(actor)]}}
+        tools = [_tool_def(n) for n in visible_tools(actor)]
+        if filexfer.client_settings(params) is not None:
+            # File tools only for clients that can fill a file argument (the spec asks servers to hide them otherwise).
+            readonly = actor.token is not None and actor.token.scope == "read"
+            tools += filexfer.tool_defs(writable=not readonly)
+        return {"jsonrpc": "2.0", "id": id_, "result": {"tools": tools}}
     if method == "tools/call":
         name = params.get("name")
         args = params.get("arguments") or {}
         if not isinstance(name, str) or not isinstance(args, dict):
             return _rpc_error(id_, -32602, "Invalid params")
-        if name not in TOOLS:
-            return _rpc_error(id_, -32602, f"Unknown tool: {name}")
         meta = params.get("_meta") or {}
         if isinstance(meta, dict) and meta.get("claudecode/sessionId"):
             actor.session_id = str(meta["claudecode/sessionId"])[:128]
+        if name in filexfer.FILE_TOOLS:
+            try:
+                return {"jsonrpc": "2.0", "id": id_, "result": filexfer.call(db, actor, name, args, params)}
+            except filexfer.BadState as e:
+                db.rollback()
+                return _rpc_error(id_, -32602, str(e))
+        if name not in TOOLS:
+            return _rpc_error(id_, -32602, f"Unknown tool: {name}")
         try:
             _validate(TOOLS[name][2], args)
             result = call(db, actor, name, args)
@@ -435,6 +460,16 @@ def handle_message(db: Session, actor: Actor, msg: dict[str, Any]) -> dict[str, 
             db.rollback()
             return _tool_error(id_, f"bad_request: {e}")
     return _rpc_error(id_, -32601, f"Method not found: {method}")
+
+
+def _capabilities() -> dict[str, Any]:
+    return {"tools": {"listChanged": False}, "extensions": {filexfer.EXT: filexfer.server_settings()}}
+
+
+def discover() -> dict[str, Any]:
+    """The same for everyone, signed in or not: what this server speaks and which extensions it offers."""
+    return {"supportedVersions": list(SUPPORTED_VERSIONS), "capabilities": _capabilities(),
+            "serverInfo": SERVER_INFO, "instructions": INSTRUCTIONS}
 
 
 def _tool_error(id_: Any, text: str) -> dict[str, Any]:
@@ -481,15 +516,26 @@ async def mcp_post(request: Request) -> Response:
     with new_session() as db:
         actor = authenticate(db, request)
         if actor is None:
+            # Discovery says the same thing to everyone, so a client can learn the extensions before signing in.
+            try:
+                pre = json.loads(body)
+            except ValueError:
+                pre = None
+            if isinstance(pre, dict) and pre.get("jsonrpc") == "2.0" and pre.get("method") == "server/discover" and "id" in pre:
+                return JSONResponse({"jsonrpc": "2.0", "id": pre["id"], "result": discover()})
             return _unauthorized()
         try:
             payload = json.loads(body)
         except ValueError:  # bad JSON, or bytes that are not UTF-8/16/32
             return JSONResponse(_rpc_error(None, -32700, "Parse error"), status_code=400)
-        if isinstance(payload, list):
-            out = [r for r in (handle_message(db, actor, m) for m in payload) if r is not None]
-            return JSONResponse(out) if out else Response(status_code=202)
-        res = handle_message(db, actor, payload)
+        try:
+            if isinstance(payload, list):
+                out = [r for r in (handle_message(db, actor, m) for m in payload) if r is not None]
+                return JSONResponse(out) if out else Response(status_code=202)
+            res = handle_message(db, actor, payload)
+        except filexfer.MissingCapability as e:
+            db.rollback()
+            return JSONResponse(e.body(), status_code=400)
         if res is None:
             return Response(status_code=202)
         return JSONResponse(res)

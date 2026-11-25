@@ -10,11 +10,15 @@
   function guess() {
     const n = q.get('client_name') || 'Claude Code';
     const os = /Mac/.test(navigator.platform) ? 'Mac' : /Win/.test(navigator.platform) ? 'Windows PC' : /Linux/.test(navigator.platform) ? 'Linux machine' : 'computer';
+    if (n === 'Claude on the web') return `Claude on the web (${session.user.display_name.split(' ')[0]})`;
     return n === 'Claude Code' ? `Claude Code on ${session.user.display_name.split(' ')[0]}’s ${os}` : n;
   }
   const dest = (() => { try { return new URL(q.get('redirect_uri')); } catch { return null; } })();
   const loopback = dest && dest.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(dest.hostname);
   const port = loopback ? dest.port : '';
+  // Claude's own apps (web, desktop, mobile) finish sign-in on Claude's site; the server only allows its exact address.
+  const claudeApps = !!dest && dest.protocol === 'https:' && ['claude.ai', 'claude.com'].includes(dest.hostname) && dest.pathname === '/api/mcp/auth_callback';
+  const who = claudeApps ? 'Claude' : 'Claude Code';
   const complete = ['client_id', 'redirect_uri', 'code_challenge'].every((f) => q.get(f));
   const home = `/users/${session.user.username}`;
 </script>
@@ -34,13 +38,13 @@
     <div class="row" style="gap:14px">
       <span class="tile"><Logo size={22} /></span>
       <span class="dash"></span>
-      <span class="tile cc"><Icon name="terminal" size={20} /></span>
+      <span class="tile cc"><Icon name={claudeApps ? 'sparkle' : 'terminal'} size={20} /></span>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px">
-      <h1 style="font-size:22px">Connect Claude Code to Artifact Buckets?</h1>
-      <p class="muted" style="margin:0;font-size:13px;line-height:1.55">Signed in as <b style="color:var(--text);font-weight:500">{session.user.display_name}</b>. {#if loopback}Claude Code is waiting on this computer{port ? ` (port ${port})` : ''}.{/if}</p>
+      <h1 style="font-size:22px">Connect {who} to Artifact Buckets?</h1>
+      <p class="muted" style="margin:0;font-size:13px;line-height:1.55">Signed in as <b style="color:var(--text);font-weight:500">{session.user.display_name}</b>. {#if loopback}Claude Code is waiting on this computer{port ? ` (port ${port})` : ''}.{:else if claudeApps}Claude on the web, desktop and mobile will save and open files as you.{/if}</p>
     </div>
-    {#if !loopback}
+    {#if !loopback && !claudeApps}
       <div class="foreign"><Icon name="alert" /><span>This sign-in goes to <b class="mono">{dest?.host || 'an unknown address'}</b>, not to Claude Code on this computer. Connect only if you started it there yourself.</span></div>
     {/if}
     <ul class="can">
@@ -49,8 +53,8 @@
       <li><Icon name="check" /><span>Share your folders, the same as you can on the web</span></li>
       {#if session.isAdmin}<li><Icon name="shield" style="color:var(--amber)" /><span>Use admin tools, because you are an admin</span></li>{/if}
     </ul>
-    <label class="lbl">Name this computer<input class="field" name="device_name" bind:value={device} maxlength="128" /></label>
-    <p class="note" style="margin:0">It shows under Connect Claude Code, where you can disconnect it at any time. The sign-in lasts 30 days of use.</p>
+    <label class="lbl">{claudeApps ? 'Name this connection' : 'Name this computer'}<input class="field" name="device_name" bind:value={device} maxlength="128" /></label>
+    <p class="note" style="margin:0">It shows under Connect Claude, where you can disconnect it at any time. The sign-in lasts 30 days of use.</p>
     <div class="row" style="justify-content:flex-end;gap:10px">
       <!-- Connect is the form's only submit button, so Enter in the name field connects. Cancel sends "deny". -->
       <input type="hidden" name="decision" value="allow" />

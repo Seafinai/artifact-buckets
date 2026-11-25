@@ -79,7 +79,7 @@
     { sec: 'Workspace' },
     { href: '/files', label: 'Files', icon: 'folder' },
     { href: '/incoming', label: 'Claude Code saves', icon: 'ingest' },
-    { href: '/connect', label: 'Connect Claude Code', icon: 'link' },
+    { href: '/connect', label: 'Connect Claude', icon: 'link' },
     { href: '/groups', label: session.isAuditor ? 'Groups and access' : 'My groups', icon: 'shield', show: !session.isAuditor },
     ...(session.isAuditor ? [
       { sec: 'Administration' },
