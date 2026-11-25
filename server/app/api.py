@@ -430,6 +430,18 @@ def tokens_list(all: bool = False, actor: Actor = Depends(current), db: Session 
     return {"tokens": rows}
 
 
+@router.post("/claude/desktop-extension")
+def claude_desktop_extension(actor: Actor = Depends(current), db: Session = Depends(get_db)) -> Response:
+    """A Claude Desktop extension made for the signed-in person (browser session only, so it needs the CSRF header)."""
+    if actor.via != "web":
+        raise Forbidden("Download it from the Connect page")
+    from . import desktop_ext
+    data, name = desktop_ext.build(db, actor)
+    db.commit()
+    return Response(data, media_type="application/octet-stream",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+
 class NewToken(BaseModel):
     name: str
     scope: str = "write"

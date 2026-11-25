@@ -46,17 +46,37 @@
   const host = (() => { try { return new URL(session.base_url).host; } catch { return session.base_url; } })();
   const guide = 'https://github.com/Seafinai/artifact-buckets/blob/main/docs/public-https.md';
   const isWeb = (d) => d.app === 'claude_web';
-  const mine = $derived(everyone ? [] : devices.filter((d) => !isWeb(d)));
-  $effect(() => { if (mine.length) return; const id = setInterval(() => { if (!everyone) load(); }, 4000); return () => clearInterval(id); });
+  // The Claude Desktop extension: made for this person on the server, downloaded as a file they open once.
+  let busy = $state(false);
+  async function desktop() {
+    busy = true;
+    try {
+      const r = await fetch('/api/claude/desktop-extension', { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': session.csrf } });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || `Download failed (${r.status})`);
+      const url = URL.createObjectURL(await r.blob());
+      const a = Object.assign(document.createElement('a'), { href: url, download: 'artifact-buckets.mcpb' });
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast('Downloaded. Open it to add Artifact Buckets to Claude Desktop.');
+      load();
+    } catch (e) { fail(e); } finally { busy = false; }
+  }
+  const mine = $derived(devices.filter((d) => !isWeb(d) && (!everyone || d.user === session.user.username)));
+  $effect(() => { if (mine.length) return; const id = setInterval(load, 4000); return () => clearInterval(id); });
 </script>
 
 <div class="page">
   <header class="page-head"><h1>Connect Claude</h1></header>
 
+  <section class="card desk">
+    <span class="di"><Icon name="download" size={18} /></span>
+    <span class="desk-t"><b>Claude desktop app</b><span>Download, open it, press Install. Made for you and this server.</span></span>
+    <button class="btn pri desk-btn" onclick={desktop} disabled={busy}><Icon name="download" />{busy ? 'Preparing…' : 'Add to Claude Desktop'}</button>
+  </section>
+
   <section class="card hero">
     <div class="hero-main">
       <div class="hero-copy">
-        <span class="kind"><Icon name="terminal" size={15} />Claude Code<span class="faint">terminal, VS Code, JetBrains</span></span>
+        <span class="kind"><Icon name="terminal" size={15} />Claude Code<span class="faint">terminal, VS Code, JetBrains, and the desktop app’s Code tab</span></span>
         <SetupCopy text={setup.prompt} />
       </div>
       <ol class="steps3">
@@ -231,6 +251,12 @@
 {/if}
 
 <style>
+  .desk { display: flex; align-items: center; gap: 16px; padding: 18px 22px; flex-wrap: wrap; }
+  .di { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: var(--amber-bg); color: var(--amber); flex: none; }
+  .desk-t { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+  .desk-t b { font-weight: 600; }
+  .desk-t span { font-size: 13px; color: var(--text-2); }
+  .desk-btn { height: 42px; padding: 0 18px; font-size: 14px; border-radius: 10px; }
   .hero { padding: 0; overflow: hidden; }
   .hero-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; padding: 26px 28px; align-items: center; }
   .hero-copy { display: flex; flex-direction: column; gap: 18px; }
