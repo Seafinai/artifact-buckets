@@ -5,6 +5,7 @@
   import { ago, agoPhrase, when } from '../lib/format.js';
   import Icon from '../lib/Icon.svelte';
   import Copy from '../lib/Copy.svelte';
+  import SetupCopy from '../lib/SetupCopy.svelte';
   import Modal from '../lib/Modal.svelte';
 
   let tokens = $state(null);
@@ -55,11 +56,11 @@
     <div class="ways">
       <div class="way">
         <h2>Ask Claude Code</h2>
-        <Copy text={setup.prompt} label="the prompt" />
+        <SetupCopy text={setup.prompt} />
       </div>
       <div class="way">
         <div class="row" style="justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <h2>Or run one line</h2>
+          <h2>Prefer a terminal?</h2>
           <div class="segs" role="group" aria-label="Your computer">
             <button class="seg" class:on={os === 'windows'} onclick={() => (os = 'windows')}>Windows</button>
             <button class="seg" class:on={os === 'unix'} onclick={() => (os = 'unix')}>macOS and Linux</button>

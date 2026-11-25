@@ -8,6 +8,7 @@
   import Logo from '../lib/Logo.svelte';
   import Icon from '../lib/Icon.svelte';
   import Copy from '../lib/Copy.svelte';
+  import SetupCopy from '../lib/SetupCopy.svelte';
   import ChangePassword from '../lib/ChangePassword.svelte';
 
   const STEPS = [
@@ -132,14 +133,16 @@
 
         {:else if cur === 'connect'}
           <h1>Connect Claude Code</h1>
-          <p class="lede">Paste this into Claude Code on your computer. It sets everything up, then opens one page here where you choose which of Claude’s existing files to bring in and press <b>Connect</b>. That’s the only click.</p>
-          <Copy text={setup.prompt} label="the prompt" />
-          <p class="note">Rather not use Claude for it? The same steps are one line for {os === 'windows' ? 'PowerShell' : 'a terminal'}, below.{#if setup.private_ca}{' '}This server has its own certificate, so your browser may warn the first time; the setup line checks that certificate before trusting the server.{/if}</p>
-          <div class="segs os" role="group" aria-label="Your computer">
-            <button class="seg" class:on={os === 'windows'} onclick={() => (os = 'windows')}>Windows</button>
-            <button class="seg" class:on={os === 'unix'} onclick={() => (os = 'unix')}>macOS and Linux</button>
-          </div>
-          <Copy text={os === 'windows' ? setup.windows : setup.unix} label="the setup command" />
+          <p class="lede">Copy the setup, paste it into Claude Code on your computer, then press <b>Connect</b> on the page that opens here.</p>
+          <SetupCopy text={setup.prompt} />
+          <details class="term">
+            <summary>Prefer a terminal?</summary>
+            <div class="segs os" role="group" aria-label="Your computer">
+              <button class="seg" class:on={os === 'windows'} onclick={() => (os = 'windows')}>Windows</button>
+              <button class="seg" class:on={os === 'unix'} onclick={() => (os = 'unix')}>macOS and Linux</button>
+            </div>
+            <Copy text={os === 'windows' ? setup.windows : setup.unix} label="the setup command" />
+          </details>
           <div class="live" class:ok={connected}>
             {#if connected}
               <span class="lv-i"><Icon name="check" /></span>
@@ -321,4 +324,8 @@
     .td-go { font-size: 0; gap: 0; margin-top: 4px; }
     .top { padding: 16px; }
   }
+  .term { font-size: 13px; color: var(--text-2); }
+  .term summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  .term[open] { display: flex; flex-direction: column; gap: 10px; }
+  .term[open] summary { margin-bottom: 2px; }
 </style>
